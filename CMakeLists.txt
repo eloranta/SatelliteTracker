@@ -24,6 +24,13 @@ add_executable(SatelliteTracker
     src/core/TleParser.cpp
     src/core/CelestrakClient.h
     src/core/CelestrakClient.cpp
+    src/core/Maidenhead.h
+    src/core/Maidenhead.cpp
+    src/core/Orbit/IOrbitPropagator.h
+    src/core/Orbit/Sgp4OrbitPropagator.h
+    src/core/Orbit/Sgp4OrbitPropagator.cpp
+    src/core/Orbit/PassFinder.h
+    src/core/Orbit/PassFinder.cpp
     src/ui/MainWindow.h
     src/ui/MainWindow.cpp
 )
@@ -41,3 +48,6 @@ target_link_libraries(SatelliteTracker PRIVATE
 if(WIN32)
     set_target_properties(SatelliteTracker PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
+
+enable_testing()
+add_subdirectory(tests)
