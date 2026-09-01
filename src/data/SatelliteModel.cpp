@@ -1,8 +1,21 @@
 #include "SatelliteModel.h"
 
+#include <QRegularExpression>
+
 namespace SatelliteTracker {
 
 namespace {
+
+// Celestrak names familiar satellites as "FULL NAME (SHORT-NAME)", e.g.
+// "OSCAR 7 (AO-7)" -- pull out the parenthesized part for the Short Name
+// column. Falls back to the full name when there's no such suffix.
+QString extractShortName(const QString &name)
+{
+    static const QRegularExpression pattern(QStringLiteral("\\(([^()]+)\\)\\s*$"));
+    const QRegularExpressionMatch match = pattern.match(name);
+    return match.hasMatch() ? match.captured(1) : name;
+}
+
 QString formatNextAos(const PassResult &pass)
 {
     switch (pass.state) {
@@ -83,6 +96,7 @@ QVariant SatelliteModel::data(const QModelIndex &index, int role) const
     switch (index.column()) {
     case ColActive:          return QVariant();
     case ColName:            return s.name;
+    case ColShortName:       return extractShortName(s.name);
     case ColNoradId:         return s.noradId;
     case ColIntlDesignator:  return s.intlDesignator;
     case ColSource:          return s.source;
@@ -138,6 +152,7 @@ QVariant SatelliteModel::headerData(int section, Qt::Orientation orientation, in
     switch (section) {
     case ColActive:         return QStringLiteral("Active");
     case ColName:           return QStringLiteral("Name");
+    case ColShortName:      return QStringLiteral("Short Name");
     case ColNoradId:        return QStringLiteral("NORAD ID");
     case ColIntlDesignator: return QStringLiteral("Int'l Designator");
     case ColSource:         return QStringLiteral("Source");

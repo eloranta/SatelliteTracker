@@ -20,6 +20,7 @@ public:
     enum Column {
         ColActive = 0,
         ColName,
+        ColShortName,
         ColNoradId,
         ColIntlDesignator,
         ColSource,
