@@ -72,6 +72,13 @@ private:
     // satellite is CurrentlyInView (whose aosUtc is only "now", not the
     // true rise time -- see PassResult's aosUtc comment).
     QDateTime m_axisEndAnchor;
+    // Once CurrentlyInView, each fresh PassResult's curve only starts at
+    // "now" -- plotting just that would clip the chart's already-elapsed
+    // (true AOS to now) portion. This accumulates curve points across
+    // setPassResult() calls for the *same* pass, so the plotted curve keeps
+    // whatever earlier history was captured (typically the full true-AOS
+    // curve, seen while the pass was still upcoming) instead of losing it.
+    QVector<ElevationPoint> m_accumulatedCurve;
 
     QLabel *m_headerLabel = nullptr;
     QLabel *m_statusChip = nullptr;

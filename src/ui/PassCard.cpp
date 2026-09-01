@@ -167,33 +167,47 @@ void PassCard::rebuildChartForPass()
         m_nowCursorSeries->clear();
         m_summaryLabel->setText(QStringLiteral("No pass in the next 24h"));
         m_axisEndAnchor = QDateTime();
+        m_accumulatedCurve.clear();
         updateHeaderLabel();
         return;
     }
 
+    // A satellite CurrentlyInView reports aosUtc == the recompute window's
+    // start (i.e. "now"), which shifts every ~30s, and its curve only ever
+    // covers "now" onward -- never the already-elapsed part of the pass.
+    // Detect "still the same pass, just refined" (LOS/TCA close to the one
+    // last seen) vs. "a new pass" the same way as the axis-freeze check
+    // below, and either merge the fresh tail onto what's already
+    // accumulated, or start over.
+    const QDateTime anchor = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.tcaUtc;
+    constexpr qint64 kSamePassToleranceSecs = 300;
+    const bool samePass = m_axisEndAnchor.isValid() && qAbs(m_axisEndAnchor.secsTo(anchor)) <= kSamePassToleranceSecs;
+
+    if (samePass && !m_accumulatedCurve.isEmpty()) {
+        const QDateTime newStart = m_lastPass.curve.first().utc;
+        while (!m_accumulatedCurve.isEmpty() && m_accumulatedCurve.last().utc >= newStart) {
+            m_accumulatedCurve.removeLast();
+        }
+        m_accumulatedCurve.append(m_lastPass.curve);
+    } else {
+        m_accumulatedCurve = m_lastPass.curve;
+    }
+
     QList<QPointF> points;
-    points.reserve(m_lastPass.curve.size());
-    for (const ElevationPoint &p : m_lastPass.curve) {
+    points.reserve(m_accumulatedCurve.size());
+    for (const ElevationPoint &p : m_accumulatedCurve) {
         points.append(QPointF(double(p.utc.toMSecsSinceEpoch()), p.elevationDeg));
     }
     m_curveSeries->replace(points);
     m_elevAxis->setRange(0.0, 90.0);
 
-    // A satellite CurrentlyInView reports aosUtc == the recompute window's
-    // start (i.e. "now"), which shifts every ~30s -- rescaling the time
-    // axis to that each cycle would make it creep forward mid-pass. Only
-    // rescale when this looks like a genuinely different pass (LOS/TCA far
-    // from the one the axis was last set for), not a refinement of the
-    // same one.
-    const QDateTime anchor = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.tcaUtc;
-    constexpr qint64 kSamePassToleranceSecs = 300;
-    if (!m_axisEndAnchor.isValid() || qAbs(m_axisEndAnchor.secsTo(anchor)) > kSamePassToleranceSecs) {
+    if (!samePass) {
         // Use AOS/LOS directly rather than the curve's first/last sampled
         // point -- the curve's adaptive step doesn't necessarily land
         // exactly on LOS, which would otherwise clip the axis a few
         // seconds short of the true end of the pass.
         const QDateTime axisEnd = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.curve.last().utc;
-        m_timeAxis->setRange(m_lastPass.aosUtc, axisEnd);
+        m_timeAxis->setRange(m_accumulatedCurve.first().utc, axisEnd);
         m_axisEndAnchor = anchor;
     }
 
