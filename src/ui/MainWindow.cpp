@@ -99,6 +99,7 @@ QWidget *MainWindow::buildCatalogTab()
     m_groupCombo->addItem(QStringLiteral("Amateur Radio"), QStringLiteral("amateur"));
     m_groupCombo->addItem(QStringLiteral("Starlink"), QStringLiteral("starlink"));
     m_groupCombo->addItem(QStringLiteral("Launched last 30 days"), QStringLiteral("last-30-days"));
+    m_groupCombo->setCurrentIndex(m_groupCombo->findData(QStringLiteral("amateur")));
     toolbar->addWidget(m_groupCombo);
 
     m_refreshButton = new QPushButton(QStringLiteral("Refresh"), tab);
