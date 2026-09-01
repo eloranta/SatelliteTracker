@@ -26,6 +26,8 @@ add_executable(SatelliteTracker
     src/core/CelestrakClient.cpp
     src/core/Maidenhead.h
     src/core/Maidenhead.cpp
+    src/core/SatelliteNaming.h
+    src/core/SatelliteNaming.cpp
     src/core/Orbit/IOrbitPropagator.h
     src/core/Orbit/Sgp4OrbitPropagator.h
     src/core/Orbit/Sgp4OrbitPropagator.cpp

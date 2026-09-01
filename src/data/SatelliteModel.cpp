@@ -1,52 +1,10 @@
 #include "SatelliteModel.h"
 
-#include <QRegularExpression>
+#include "../core/SatelliteNaming.h"
 
 namespace SatelliteTracker {
 
 namespace {
-
-// Celestrak names familiar satellites as "FULL NAME (SHORT-NAME)", e.g.
-// "OSCAR 7 (AO-7)" -- pull out the parenthesized part for the Short Name
-// column. ISS is the opposite: "ISS (ZARYA)" names the module in
-// parentheses, not the familiar name, so it's special-cased. Falls back to
-// the full name when there's no parenthetical suffix at all.
-QString extractShortName(const QString &name)
-{
-    if (name.startsWith(QLatin1String("ISS "))) {
-        return QStringLiteral("ISS");
-    }
-
-    static const QRegularExpression pattern(QStringLiteral("\\(([^()]+)\\)\\s*$"));
-    const QRegularExpressionMatch match = pattern.match(name);
-    return match.hasMatch() ? match.captured(1) : name;
-}
-
-// Not derivable from TLE data -- a satellite's transponder type isn't
-// orbital data. Covers only the satellites whose current FM/linear mode was
-// confirmed against AMSAT's live status categorization; anything else (or
-// any satellite that goes silent/decommissioned) shows blank rather than a
-// guessed or stale mode.
-QString lookupMode(const QString &shortName)
-{
-    static const QHash<QString, QString> modeByShortName = {
-        {QStringLiteral("AO-7"), QStringLiteral("Linear")},
-        {QStringLiteral("AO-73"), QStringLiteral("Linear")},
-        {QStringLiteral("FO-29"), QStringLiteral("Linear")},
-        {QStringLiteral("JO-97"), QStringLiteral("Linear")},
-        {QStringLiteral("QO-100"), QStringLiteral("Linear")},
-        {QStringLiteral("RS-44"), QStringLiteral("Linear")},
-        {QStringLiteral("AO-91"), QStringLiteral("FM")},
-        {QStringLiteral("AO-123"), QStringLiteral("FM")},
-        {QStringLiteral("CAS-3H"), QStringLiteral("FM")},
-        {QStringLiteral("IO-86"), QStringLiteral("FM")},
-        {QStringLiteral("ISS"), QStringLiteral("FM")},
-        {QStringLiteral("PO-101"), QStringLiteral("FM")},
-        {QStringLiteral("RS95S"), QStringLiteral("FM")},
-        {QStringLiteral("SO-50"), QStringLiteral("FM")},
-    };
-    return modeByShortName.value(shortName.toUpper());
-}
 
 QString formatNextAos(const PassResult &pass)
 {
@@ -129,8 +87,8 @@ QVariant SatelliteModel::data(const QModelIndex &index, int role) const
     switch (index.column()) {
     case ColActive:          return QVariant();
     case ColName:            return s.name;
-    case ColShortName:       return extractShortName(s.name);
-    case ColMode:            return lookupMode(extractShortName(s.name));
+    case ColShortName:       return SatelliteNaming::shortName(s.name);
+    case ColMode:            return SatelliteNaming::mode(SatelliteNaming::shortName(s.name));
     case ColNoradId:         return s.noradId;
     case ColIntlDesignator:  return s.intlDesignator;
     case ColSource:          return s.source;
