@@ -174,7 +174,12 @@ void PassCard::rebuildChartForPass()
     const QDateTime anchor = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.tcaUtc;
     constexpr qint64 kSamePassToleranceSecs = 300;
     if (!m_axisEndAnchor.isValid() || qAbs(m_axisEndAnchor.secsTo(anchor)) > kSamePassToleranceSecs) {
-        m_timeAxis->setRange(m_lastPass.curve.first().utc, m_lastPass.curve.last().utc);
+        // Use AOS/LOS directly rather than the curve's first/last sampled
+        // point -- the curve's adaptive step doesn't necessarily land
+        // exactly on LOS, which would otherwise clip the axis a few
+        // seconds short of the true end of the pass.
+        const QDateTime axisEnd = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.curve.last().utc;
+        m_timeAxis->setRange(m_lastPass.aosUtc, axisEnd);
         m_axisEndAnchor = anchor;
     }
 
