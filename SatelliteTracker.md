@@ -40,6 +40,20 @@ SatelliteTracker downloads orbital elements (TLEs) for a user-selected set of sa
 - Cards re-flow automatically as satellites are checked/unchecked in Tab 2.
 - Double-clicking a card opens a detail dialog with a longer-range table of the satellite's next N passes.
 
+**As built (M3):** AOS/TCA/LOS/max-elevation "markers ... annotated with
+time" are rendered as a compact text line under the chart (e.g. `AOS 03:14 ·
+TCA 03:19 (62° az 210°) · LOS 03:24`) rather than as in-chart annotations —
+same information, simpler and more reliably legible than custom
+`QGraphicsItem` label placement. The status chip mapping: `No upcoming pass`
+= `PassResult.state == NoPassInWindow`; `Idle` = below horizon, AOS >5 min
+away; `Rising` = below horizon, AOS within 5 min; `In View` = above horizon,
+at/before TCA (ascending); `Setting` = above horizon, after TCA (descending).
+Grid column count is auto-fit only (viewport width ÷ a fixed card min-width)
+— the "configurable in Settings" part is deferred to M7, since only the
+minimal M2 Observer Location dialog exists so far, not the full Settings
+dialog. The double-click detail dialog shows the next 5 passes (not
+configurable yet), computed via `PassFinder::findUpcomingPasses`.
+
 ### Tab 2 — Satellite Catalog
 - `QTableView` backed by a `QAbstractTableModel`, one row per satellite from the loaded TLE set.
 - Columns:
@@ -248,6 +262,17 @@ assert-and-exit-code executable wired via `enable_testing()`/`add_test()`,
 validating the Maidenhead formula and pass-finder invariants against real
 reference data (no new test-framework dependency).
 
+**Current layout (M3 additions):** `ui/PassCard.*`, `ui/PassGridWidget.*`,
+and `ui/PassDetailDialog.*` now exist as planned. One addition not in the
+original target layout: `core/SatelliteNaming.*`, a small shared utility
+(short-designator extraction + the FM/Linear mode lookup) pulled out of
+`SatelliteModel.cpp` once `PassCard`'s header needed the same logic, rather
+than duplicating it. **Known gap:** `tests/orbit_tests.cpp` wasn't extended
+to cover the M3-added `PassResult::curve` sampling or
+`findUpcomingPasses()` — both are exercised indirectly (curve data flows
+through `PassCard`'s chart, verified by a manual smoke test) but have no
+dedicated assertions yet.
+
 ### 7.2 Key libraries
 - **Qt 6 Widgets + Qt Charts** — UI and elevation plots.
 - **QtSql (SQLite driver)** — local persistence.
@@ -260,6 +285,16 @@ reference data (no new test-framework dependency).
 - TLE fetches run on a dedicated worker (`QThreadPool` task); results parsed off-thread and merged into the DB, then the model is refreshed on the UI thread via a queued signal.
 - Pass prediction for all active satellites runs on a periodic timer (default every 30s) on a worker thread; each `PassCard` is updated via signal/slot with the freshly computed pass window.
 - Alert evaluation happens right after each propagation pass, also off the UI thread; only notification dispatch touches the UI/tray (queued to main thread).
+
+**As built (M3):** the 30s recompute is `ActiveSatelliteTracker`'s existing
+`QtConcurrent::run` + `QFutureWatcher` job (added in M2), whose
+`passesUpdated` signal now also reaches `PassGridWidget`/`PassCard` — no
+second worker was introduced. The chart's live "now" marker and status chip
+tick every 1s on the UI thread directly (each `PassCard` owns its own
+`Sgp4OrbitPropagator`, reloaded only when its TLE changes): a single
+propagation per active card per second is cheap enough (well within the §8
+NFR's 50-satellite target) that hopping to a worker thread for it wasn't
+worth the complexity.
 
 ---
 
@@ -286,8 +321,10 @@ reference data (no new test-framework dependency).
   `vcpkg.json` exists here. A stray top-level `build/` directory from an earlier, abandoned
   attempt at this (pointing at an MSVC `cl.exe`, with a broken `vcpkg-manifest-install.log`)
   is left over but unused; the real build lives in `build/Desktop_Qt_6_9_0_MinGW_64_bit-Debug/`
-  (Qt Creator's MinGW/Ninja kit). MinGW/MSYS2 is the only active build path through M2; the
+  (Qt Creator's MinGW/Ninja kit). MinGW/MSYS2 is the only active build path through M3; the
   two toolchains aren't mixed in one build tree. SGP4 is vendored as source instead (§7.2).
+  Qt Charts (M3) is a separate MSYS2 package, `mingw-w64-x86_64-qt6-charts` — not bundled
+  with `qt6-base` — see `README.md` for the updated prerequisites.
 - **Packaging note:** `windeployqt` is used post-build to gather MinGW Qt DLLs/plugins
   next to the `.exe` for standalone runs outside the MSYS2 shell.
 - **CI (optional but recommended):** GitHub Actions Windows runner — configure, build, run unit tests (orbit math + TLE parsing are the highest-value things to test), and produce a packaged artifact.
@@ -300,7 +337,7 @@ reference data (no new test-framework dependency).
 |---|---|---|
 | M1 | TLE fetch (Celestrak first) + parsing + SQLite cache; Tab 2 catalog table (no checkboxes yet) | **Done** — see `README.md` |
 | M2 | SGP4 propagation + next-pass finder for a fixed observer; Tab 2 checkboxes wired to an "active satellites" list | **Done** — vendored SGP4 (§7.2), Maidenhead-locator observer settings (§6), Next AOS scoped to active satellites only (§2) |
-| M3 | Tab 1 pass grid with live elevation charts for active satellites | Not started (Tab 1 is a placeholder) |
+| M3 | Tab 1 pass grid with live elevation charts for active satellites | **Done** — Qt Charts linked, status-chip mapping + simplified annotations (§2), no dedicated tests for the new curve/multi-pass code yet (§7.1) |
 | M4 | Alert engine (AOS/LOS/threshold) + tray notifications + Alerts dock | Not started |
 | M5 | Pass log + app event log + Log dock + CSV export | Not started |
 | M6 | Space-Track integration (credential storage, auth, rate-limited client) | Not started |
@@ -312,5 +349,5 @@ reference data (no new test-framework dependency).
 
 - ~~Observer location: assumed fixed and set once in Settings — confirm no need for "current GPS location" auto-detection.~~ **Resolved in M2:** no GPS auto-detection; fixed, set once via `ObserverLocationDialog` (Settings → Observer Location…). Entered as a Maidenhead grid locator rather than raw lat/lon (ham-radio-friendly and less error-prone to type than decimal coordinates), plus an altitude in meters.
 - Space-Track query scope: assumed on-demand per-satellite queries against the GP class; confirm if a full bulk catalog download (like Celestrak) is preferred instead to reduce request count.
-- Chart lookahead: assumed each Tab 1 card shows only the *next* pass; confirm whether a secondary "next 3 passes" mini-list per card is wanted in v1 or can wait.
+- ~~Chart lookahead: assumed each Tab 1 card shows only the *next* pass; confirm whether a secondary "next 3 passes" mini-list per card is wanted in v1 or can wait.~~ **Resolved in M3:** the card itself still shows only the next pass, as assumed; the "several upcoming passes" need is instead met by the double-click detail dialog (next 5 passes), keeping the card uncluttered.
 - No map/globe in v1 — confirm this is acceptable, since it's a common expectation for "satellite tracker" apps and could be a fast-follow (v1.1) using the existing propagation core.
