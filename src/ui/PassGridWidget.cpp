@@ -12,7 +12,7 @@
 namespace SatelliteTracker {
 
 namespace {
-constexpr int kCardMinWidth = 380;
+constexpr int kColumns = 4;
 constexpr int kTickIntervalMs = 1000;
 }
 
@@ -84,20 +84,13 @@ void PassGridWidget::applyPassResults(const QHash<int, PassResult> &resultsByNor
     }
 }
 
-void PassGridWidget::resizeEvent(QResizeEvent *event)
-{
-    QScrollArea::resizeEvent(event);
-    reflow();
-}
-
 void PassGridWidget::reflow()
 {
     QList<int> noradIds = m_cardsByNoradId.keys();
     std::sort(noradIds.begin(), noradIds.end());
 
-    const int columns = qMax(1, viewport()->width() / kCardMinWidth);
     for (int i = 0; i < noradIds.size(); ++i) {
-        m_gridLayout->addWidget(m_cardsByNoradId.value(noradIds.at(i)), i / columns, i % columns);
+        m_gridLayout->addWidget(m_cardsByNoradId.value(noradIds.at(i)), i / kColumns, i % kColumns);
     }
 }
 

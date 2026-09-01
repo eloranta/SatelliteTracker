@@ -31,8 +31,12 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
     m_headerLabel = new QLabel(this);
     QFont headerFont = m_headerLabel->font();
     headerFont.setBold(true);
+    headerFont.setPointSize(headerFont.pointSize() - 1);
     m_headerLabel->setFont(headerFont);
     m_statusChip = new QLabel(this);
+    QFont chipFont = m_statusChip->font();
+    chipFont.setPointSize(qMax(7, chipFont.pointSize() - 2));
+    m_statusChip->setFont(chipFont);
     m_statusChip->setStyleSheet(QStringLiteral("color: #888;"));
     headerRow->addWidget(m_headerLabel, 1);
     headerRow->addWidget(m_statusChip);
@@ -40,7 +44,7 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
 
     m_chart = new QChart();
     m_chart->legend()->hide();
-    m_chart->setMargins(QMargins(4, 4, 4, 4));
+    m_chart->setMargins(QMargins(2, 2, 2, 2));
 
     m_curveSeries = new QLineSeries();
     m_nowMarkerSeries = new QScatterSeries();
@@ -62,10 +66,13 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
 
     m_chartView = new QChartView(m_chart, this);
     m_chartView->setRenderHint(QPainter::Antialiasing);
-    m_chartView->setMinimumHeight(180);
+    m_chartView->setMinimumHeight(110);
     layout->addWidget(m_chartView, 1);
 
     m_summaryLabel = new QLabel(this);
+    QFont summaryFont = m_summaryLabel->font();
+    summaryFont.setPointSize(qMax(7, summaryFont.pointSize() - 2));
+    m_summaryLabel->setFont(summaryFont);
     m_summaryLabel->setStyleSheet(QStringLiteral("color: #888;"));
     m_summaryLabel->setWordWrap(true);
     layout->addWidget(m_summaryLabel);

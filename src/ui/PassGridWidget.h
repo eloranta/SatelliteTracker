@@ -16,8 +16,9 @@ namespace SatelliteTracker {
 class PassCard;
 
 // Tab 1: a QScrollArea of PassCards, one per active satellite, per
-// SatelliteTracker.md §2. Reflows into however many columns fit the current
-// width; ticks every card once a second for the live "now" marker.
+// SatelliteTracker.md §2. Fixed at a 4-wide grid (extra rows beyond the
+// ~3 that fit the viewport scroll into view); ticks every card once a
+// second for the live "now" marker.
 class PassGridWidget : public QScrollArea {
     Q_OBJECT
 public:
@@ -30,9 +31,6 @@ public:
 
 public slots:
     void applyPassResults(const QHash<int, PassResult> &resultsByNoradId);
-
-protected:
-    void resizeEvent(QResizeEvent *event) override;
 
 private:
     void reflow();
