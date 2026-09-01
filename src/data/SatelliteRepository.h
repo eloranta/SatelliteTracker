@@ -34,6 +34,9 @@ public:
     // Records `utc` as the moment the catalog was last refreshed.
     bool setLastCatalogUpdateUtc(const QDateTime &utc, QString *errorOut = nullptr);
 
+    // Persists whether a single satellite is on the M2 "active" watchlist.
+    bool setSatelliteActive(int noradId, bool active, QString *errorOut = nullptr);
+
 private:
     QString m_connectionName;
 };

@@ -186,4 +186,26 @@ bool SatelliteRepository::setLastCatalogUpdateUtc(const QDateTime &utc, QString 
     return true;
 }
 
+bool SatelliteRepository::setSatelliteActive(int noradId, bool active, QString *errorOut)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.isOpen()) {
+        if (errorOut) *errorOut = QStringLiteral("Database connection is not open");
+        return false;
+    }
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "UPDATE satellites SET is_active = :active WHERE norad_id = :norad_id"));
+    q.bindValue(QStringLiteral(":active"), active ? 1 : 0);
+    q.bindValue(QStringLiteral(":norad_id"), noradId);
+
+    if (!q.exec()) {
+        if (errorOut) *errorOut = q.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace SatelliteTracker

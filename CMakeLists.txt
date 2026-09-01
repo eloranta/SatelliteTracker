@@ -31,8 +31,15 @@ add_executable(SatelliteTracker
     src/core/Orbit/Sgp4OrbitPropagator.cpp
     src/core/Orbit/PassFinder.h
     src/core/Orbit/PassFinder.cpp
+    src/core/ObserverLocation.h
+    src/core/AppSettings.h
+    src/core/AppSettings.cpp
+    src/core/ActiveSatelliteTracker.h
+    src/core/ActiveSatelliteTracker.cpp
     src/ui/MainWindow.h
     src/ui/MainWindow.cpp
+    src/ui/ObserverLocationDialog.h
+    src/ui/ObserverLocationDialog.cpp
 )
 
 target_include_directories(SatelliteTracker PRIVATE src)
