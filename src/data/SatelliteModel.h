@@ -21,6 +21,7 @@ public:
         ColActive = 0,
         ColName,
         ColShortName,
+        ColMode,
         ColNoradId,
         ColIntlDesignator,
         ColSource,

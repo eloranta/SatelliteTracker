@@ -22,6 +22,32 @@ QString extractShortName(const QString &name)
     return match.hasMatch() ? match.captured(1) : name;
 }
 
+// Not derivable from TLE data -- a satellite's transponder type isn't
+// orbital data. Covers only the satellites whose current FM/linear mode was
+// confirmed against AMSAT's live status categorization; anything else (or
+// any satellite that goes silent/decommissioned) shows blank rather than a
+// guessed or stale mode.
+QString lookupMode(const QString &shortName)
+{
+    static const QHash<QString, QString> modeByShortName = {
+        {QStringLiteral("AO-7"), QStringLiteral("Linear")},
+        {QStringLiteral("AO-73"), QStringLiteral("Linear")},
+        {QStringLiteral("FO-29"), QStringLiteral("Linear")},
+        {QStringLiteral("JO-97"), QStringLiteral("Linear")},
+        {QStringLiteral("QO-100"), QStringLiteral("Linear")},
+        {QStringLiteral("RS-44"), QStringLiteral("Linear")},
+        {QStringLiteral("AO-91"), QStringLiteral("FM")},
+        {QStringLiteral("AO-123"), QStringLiteral("FM")},
+        {QStringLiteral("CAS-3H"), QStringLiteral("FM")},
+        {QStringLiteral("IO-86"), QStringLiteral("FM")},
+        {QStringLiteral("ISS"), QStringLiteral("FM")},
+        {QStringLiteral("PO-101"), QStringLiteral("FM")},
+        {QStringLiteral("RS95S"), QStringLiteral("FM")},
+        {QStringLiteral("SO-50"), QStringLiteral("FM")},
+    };
+    return modeByShortName.value(shortName.toUpper());
+}
+
 QString formatNextAos(const PassResult &pass)
 {
     switch (pass.state) {
@@ -85,6 +111,7 @@ QVariant SatelliteModel::data(const QModelIndex &index, int role) const
     if (role == Qt::TextAlignmentRole) {
         switch (index.column()) {
         case ColActive:
+        case ColMode:
             return int(Qt::AlignCenter);
         case ColNoradId:
         case ColInclination:
@@ -103,6 +130,7 @@ QVariant SatelliteModel::data(const QModelIndex &index, int role) const
     case ColActive:          return QVariant();
     case ColName:            return s.name;
     case ColShortName:       return extractShortName(s.name);
+    case ColMode:            return lookupMode(extractShortName(s.name));
     case ColNoradId:         return s.noradId;
     case ColIntlDesignator:  return s.intlDesignator;
     case ColSource:          return s.source;
@@ -159,6 +187,7 @@ QVariant SatelliteModel::headerData(int section, Qt::Orientation orientation, in
     case ColActive:         return QStringLiteral("Active");
     case ColName:           return QStringLiteral("Full Name");
     case ColShortName:      return QStringLiteral("Name");
+    case ColMode:           return QStringLiteral("Mode");
     case ColNoradId:        return QStringLiteral("NORAD ID");
     case ColIntlDesignator: return QStringLiteral("Int'l Designator");
     case ColSource:         return QStringLiteral("Source");
