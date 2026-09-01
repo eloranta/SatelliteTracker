@@ -68,16 +68,15 @@ private:
     bool m_areaIsGreen = false;
     // LOS (or TCA, if LOS unknown) the time axis range was last set from;
     // used to tell "still the same pass, just refined" apart from "a new
-    // pass" so the axis doesn't creep forward every ~30s recompute while a
-    // satellite is CurrentlyInView (whose aosUtc is only "now", not the
-    // true rise time -- see PassResult's aosUtc comment).
+    // pass" so the axis doesn't jitter/re-set every ~30s recompute from
+    // sub-second bisection-precision differences between calls.
     QDateTime m_axisEndAnchor;
-    // Once CurrentlyInView, each fresh PassResult's curve only starts at
-    // "now" -- plotting just that would clip the chart's already-elapsed
-    // (true AOS to now) portion. This accumulates curve points across
-    // setPassResult() calls for the *same* pass, so the plotted curve keeps
-    // whatever earlier history was captured (typically the full true-AOS
-    // curve, seen while the pass was still upcoming) instead of losing it.
+    // Defensive accumulation of curve points across setPassResult() calls
+    // for the *same* pass. PassFinder now finds the true AOS even when
+    // CurrentlyInView (searching backward from "now"), so each fresh curve
+    // should already span the full true-AOS..LOS range on its own -- this
+    // just guards against the plotted curve ever losing already-captured
+    // history if two calls' bisected AOS differ slightly.
     QVector<ElevationPoint> m_accumulatedCurve;
 
     QLabel *m_headerLabel = nullptr;

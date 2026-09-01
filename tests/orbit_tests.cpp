@@ -124,6 +124,48 @@ void testPassFinderInvariants()
     checkNear(pass.maxElevationDeg, elevAtTca, 1e-6, "maxElevationDeg matches the elevation computed at tcaUtc");
 }
 
+void testCurrentlyInViewFindsTrueAos()
+{
+    // Regression test: a CurrentlyInView PassResult must report the true
+    // rise instant (found by searching backward from "now"), not "now"
+    // itself -- otherwise a chart built from it clips the already-elapsed
+    // part of the pass.
+    const QString line1 = QStringLiteral(
+        "1 00005U 58002B   00179.78495062  .00000023  00000-0  28098-4 0  4753");
+    const QString line2 = QStringLiteral(
+        "2 00005  34.2682 348.7242 1859667 331.7664  19.3264 10.82419157413667");
+
+    Sgp4OrbitPropagator propagator;
+    check(propagator.loadTle(line1, line2), "pinned TLE loads for the CurrentlyInView test");
+
+    const QDateTime fromUtc(QDate(2000, 6, 28), QTime(0, 0, 0), QTimeZone::UTC);
+    const double observerLat = 30.0;
+    const double observerLon = -75.0;
+    const double observerAlt = 0.0;
+
+    const PassResult upcoming = findNextPass(propagator, fromUtc, observerLat, observerLon, observerAlt,
+                                              /*lookaheadHours=*/48, /*coarseStepSeconds=*/30);
+    check(upcoming.state == PassState::UpcomingPass, "first pass from the pinned epoch is upcoming, not in-view");
+    if (upcoming.state != PassState::UpcomingPass) return;
+
+    // TCA is by definition inside the pass, so starting a fresh search
+    // there should find the *same* pass as already in progress.
+    const PassResult inView = findNextPass(propagator, upcoming.tcaUtc, observerLat, observerLon, observerAlt,
+                                            /*lookaheadHours=*/48, /*coarseStepSeconds=*/30);
+    check(inView.state == PassState::CurrentlyInView, "searching from TCA reports CurrentlyInView");
+
+    check(qAbs(upcoming.aosUtc.msecsTo(inView.aosUtc)) < 2000,
+          "CurrentlyInView's aosUtc matches the pass's true AOS, not the search instant");
+    check(qAbs(upcoming.losUtc.msecsTo(inView.losUtc)) < 2000,
+          "CurrentlyInView's losUtc still matches the same pass's true LOS");
+
+    check(!inView.curve.isEmpty(), "CurrentlyInView still produces a curve");
+    if (!inView.curve.isEmpty()) {
+        check(qAbs(inView.aosUtc.msecsTo(inView.curve.first().utc)) < 2000,
+              "CurrentlyInView's curve starts at the true AOS, not at the search instant (TCA)");
+    }
+}
+
 } // namespace
 
 int main()
@@ -132,6 +174,7 @@ int main()
     testMaidenheadRealWorldSanity();
     testMaidenheadValidation();
     testPassFinderInvariants();
+    testCurrentlyInViewFindsTrueAos();
 
     if (g_failures > 0) {
         std::fprintf(stderr, "\n%d check(s) failed\n", g_failures);

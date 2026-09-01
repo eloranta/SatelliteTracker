@@ -16,9 +16,12 @@ struct ElevationPoint {
 
 struct PassResult {
     PassState state = PassState::NoPassInWindow;
-    // aosUtc: for UpcomingPass, the true rise instant; for CurrentlyInView,
-    // the start of the search window (the actual rise time is in the past
-    // and unknown).
+    // The true rise instant, for both UpcomingPass and CurrentlyInView --
+    // SGP4 propagates to past instants as validly as future ones, so
+    // findNextPass() searches backward from fromUtc when already in view
+    // rather than settling for "now" as a stand-in. Only falls back to
+    // fromUtc itself if no rise is found within a bounded backward search
+    // (e.g. a continuously-visible near-geostationary satellite).
     QDateTime aosUtc;
     QDateTime tcaUtc;
     QDateTime losUtc;

@@ -142,9 +142,6 @@ QDateTime PassCard::aosSortKey() const
     if (m_lastPass.state == PassState::NoPassInWindow) {
         return QDateTime(QDate(9999, 1, 1), QTime(0, 0), QTimeZone::UTC);
     }
-    // CurrentlyInView's aosUtc is just "now" as of the last recompute (see
-    // PassResult's aosUtc comment) -- already-visible passes naturally sort
-    // near the front either way, so no special-casing needed here.
     return m_lastPass.aosUtc;
 }
 
@@ -172,13 +169,10 @@ void PassCard::rebuildChartForPass()
         return;
     }
 
-    // A satellite CurrentlyInView reports aosUtc == the recompute window's
-    // start (i.e. "now"), which shifts every ~30s, and its curve only ever
-    // covers "now" onward -- never the already-elapsed part of the pass.
     // Detect "still the same pass, just refined" (LOS/TCA close to the one
-    // last seen) vs. "a new pass" the same way as the axis-freeze check
-    // below, and either merge the fresh tail onto what's already
-    // accumulated, or start over.
+    // last seen) vs. "a new pass", to decide whether to merge the fresh
+    // curve onto what's already accumulated or start over (see
+    // m_accumulatedCurve's comment).
     const QDateTime anchor = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.tcaUtc;
     constexpr qint64 kSamePassToleranceSecs = 300;
     const bool samePass = m_axisEndAnchor.isValid() && qAbs(m_axisEndAnchor.secsTo(anchor)) <= kSamePassToleranceSecs;

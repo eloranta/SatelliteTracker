@@ -4,6 +4,12 @@ namespace SatelliteTracker {
 
 namespace {
 
+// Bound on how far back to search for a CurrentlyInView pass's true AOS.
+// Generous for any real LEO/MEO amateur pass (minutes to tens of minutes);
+// bounded so a satellite that's continuously above the horizon (e.g. a
+// near-geostationary bird) doesn't turn into an unbounded backward scan.
+constexpr int kBackwardAosSearchHours = 6;
+
 double elevationDegAt(const IOrbitPropagator &propagator, const QDateTime &t,
                        double lat, double lon, double alt)
 {
@@ -76,8 +82,23 @@ PassResult findNextPass(const IOrbitPropagator &propagator,
 
     if (prevElev > 0.0) {
         result.state = PassState::CurrentlyInView;
-        aosUtc = fromUtc;
         haveAos = true;
+
+        // SGP4 propagates to past instants just as validly as future ones,
+        // so the true AOS is findable by searching backward from fromUtc --
+        // no need to settle for "now" as a stand-in, which would otherwise
+        // clip the chart to only the not-yet-elapsed remainder of the pass.
+        aosUtc = fromUtc;
+        const QDateTime backLimit = fromUtc.addSecs(-qint64(kBackwardAosSearchHours) * 3600);
+        QDateTime laterT = fromUtc;
+        for (QDateTime t = fromUtc.addSecs(-coarseStepSeconds); t >= backLimit; t = t.addSecs(-coarseStepSeconds)) {
+            const double elev = elevationDegAt(propagator, t, lat, lon, alt);
+            if (elev <= 0.0) {
+                aosUtc = bisectZeroCrossing(propagator, lat, lon, alt, t, laterT, /*rising=*/true);
+                break;
+            }
+            laterT = t;
+        }
     }
 
     // Scan forward for AOS (if not already in view) and then LOS.
