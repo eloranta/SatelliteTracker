@@ -58,6 +58,7 @@ protected:
 
 private:
     void rebuildChartForPass();
+    void updateHeaderLabel();
     QString statusFor(const QDateTime &nowUtc, double elevationNowDeg, bool haveFix) const;
 
     Satellite m_satellite;

@@ -107,16 +107,31 @@ void PassCard::updateSatellite(const Satellite &satellite)
     const bool tleChanged = satellite.tleLine1 != m_satellite.tleLine1
                           || satellite.tleLine2 != m_satellite.tleLine2;
     m_satellite = satellite;
-
-    m_headerLabel->setText(QStringLiteral("%1 (%2)")
-                                .arg(SatelliteNaming::shortName(satellite.name))
-                                .arg(satellite.noradId));
+    updateHeaderLabel();
 
     if (tleChanged || !m_propagator) {
         auto propagator = std::make_unique<Sgp4OrbitPropagator>();
         propagator->loadTle(satellite.tleLine1, satellite.tleLine2);
         m_propagator = std::move(propagator);
     }
+}
+
+void PassCard::updateHeaderLabel()
+{
+    const QString name = SatelliteNaming::shortName(m_satellite.name);
+
+    QString aosText;
+    if (m_lastPass.state == PassState::CurrentlyInView) {
+        aosText = QStringLiteral("In view");
+    } else if (m_lastPass.state == PassState::UpcomingPass) {
+        const QDate aosDate = m_lastPass.aosUtc.date();
+        const QString datePart = aosDate == QDateTime::currentDateTimeUtc().date()
+            ? QStringLiteral("Today")
+            : aosDate.toString(QStringLiteral("yyyy-MM-dd"));
+        aosText = datePart + QLatin1Char(' ') + m_lastPass.aosUtc.toString(QStringLiteral("HH:mm:ss"));
+    }
+
+    m_headerLabel->setText(aosText.isEmpty() ? name : name + QStringLiteral(" — ") + aosText);
 }
 
 void PassCard::setObserverLocation(const ObserverLocation &location)
@@ -154,6 +169,7 @@ void PassCard::rebuildChartForPass()
         m_nowCursorSeries->clear();
         m_summaryLabel->setText(QStringLiteral("No pass in the next 24h"));
         m_axisEndAnchor = QDateTime();
+        updateHeaderLabel();
         return;
     }
 
@@ -199,6 +215,8 @@ void PassCard::rebuildChartForPass()
             .arg(aosText, m_lastPass.tcaUtc.toString(QStringLiteral("HH:mm:ss")),
                  QString::number(m_lastPass.maxElevationDeg, 'f', 0),
                  QString::number(m_lastPass.maxElevAzimuthDeg, 'f', 0), losText));
+
+    updateHeaderLabel();
 }
 
 void PassCard::tick(const QDateTime &nowUtc)
