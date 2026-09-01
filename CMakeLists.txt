@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Network Sql Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network Sql Concurrent Charts)
 
 add_subdirectory(third_party/sgp4)
 
@@ -49,6 +49,7 @@ target_link_libraries(SatelliteTracker PRIVATE
     Qt6::Network
     Qt6::Sql
     Qt6::Concurrent
+    Qt6::Charts
     sgp4
 )
 

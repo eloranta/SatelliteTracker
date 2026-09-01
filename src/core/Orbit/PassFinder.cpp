@@ -126,7 +126,42 @@ PassResult findNextPass(const IOrbitPropagator &propagator,
     result.maxElevationDeg = tcaLook.valid ? tcaLook.elevationDeg : bestElev;
     result.maxElevAzimuthDeg = tcaLook.valid ? tcaLook.azimuthDeg : 0.0;
 
+    // Sample the curve for charting. Adaptive step so a long or unbounded
+    // (e.g. losUtc not found within the window) span still caps out around
+    // ~180 points rather than growing unbounded.
+    const QDateTime curveEnd = result.losUtc.isValid() ? result.losUtc : tcaScanEnd;
+    const qint64 spanSeconds = aosUtc.secsTo(curveEnd);
+    const int curveStepSeconds = qBound(5, int(spanSeconds / 180), coarseStepSeconds);
+    for (QDateTime t = aosUtc; t <= curveEnd; t = t.addSecs(curveStepSeconds)) {
+        result.curve.append({t, elevationDegAt(propagator, t, lat, lon, alt)});
+    }
+
     return result;
+}
+
+QVector<PassResult> findUpcomingPasses(const IOrbitPropagator &propagator,
+                                        const QDateTime &fromUtc,
+                                        double observerLatDeg, double observerLonDeg, double observerAltMeters,
+                                        int count,
+                                        int lookaheadHoursPerCall,
+                                        int coarseStepSeconds)
+{
+    QVector<PassResult> results;
+    QDateTime cursor = fromUtc;
+
+    while (results.size() < count) {
+        const PassResult pass = findNextPass(propagator, cursor, observerLatDeg, observerLonDeg,
+                                              observerAltMeters, lookaheadHoursPerCall, coarseStepSeconds);
+        if (pass.state == PassState::NoPassInWindow) {
+            break;
+        }
+        results.append(pass);
+
+        const QDateTime end = pass.losUtc.isValid() ? pass.losUtc : pass.tcaUtc;
+        cursor = end.addSecs(60);
+    }
+
+    return results;
 }
 
 } // namespace SatelliteTracker
