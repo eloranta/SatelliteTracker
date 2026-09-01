@@ -89,6 +89,7 @@ QWidget *MainWindow::buildCatalogTab()
     m_groupCombo->addItem(QStringLiteral("Space stations"), QStringLiteral("stations"));
     m_groupCombo->addItem(QStringLiteral("Visible (brightest)"), QStringLiteral("visual"));
     m_groupCombo->addItem(QStringLiteral("Weather"), QStringLiteral("weather"));
+    m_groupCombo->addItem(QStringLiteral("Amateur Radio"), QStringLiteral("amateur"));
     m_groupCombo->addItem(QStringLiteral("Starlink"), QStringLiteral("starlink"));
     m_groupCombo->addItem(QStringLiteral("Launched last 30 days"), QStringLiteral("last-30-days"));
     toolbar->addWidget(m_groupCombo);
