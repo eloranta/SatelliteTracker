@@ -120,12 +120,8 @@ void PassCard::updateHeaderLabel()
 {
     const QString name = SatelliteNaming::shortName(m_satellite.name);
 
-    // CurrentlyInView leaves aosText empty (falls back to just the name) --
-    // the status chip already says "In View"/"Setting", and its aosUtc is
-    // only a "now" placeholder anyway (see PassResult's aosUtc comment), not
-    // a real time worth showing.
     QString aosText;
-    if (m_lastPass.state == PassState::UpcomingPass) {
+    if (m_lastPass.state == PassState::UpcomingPass || m_lastPass.state == PassState::CurrentlyInView) {
         const QDate aosDate = m_lastPass.aosUtc.date();
         const QString datePart = aosDate == QDateTime::currentDateTimeUtc().date()
             ? QStringLiteral("Today")
@@ -133,7 +129,7 @@ void PassCard::updateHeaderLabel()
         aosText = datePart + QLatin1Char(' ') + m_lastPass.aosUtc.toString(QStringLiteral("HH:mm:ss"));
     }
 
-    m_headerLabel->setText(aosText.isEmpty() ? name : name + QStringLiteral(" — ") + aosText);
+    m_headerLabel->setText(aosText.isEmpty() ? name : name + QLatin1Char(' ') + aosText);
 }
 
 void PassCard::setObserverLocation(const ObserverLocation &location)
