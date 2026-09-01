@@ -141,6 +141,7 @@ void PassCard::rebuildChartForPass()
         m_nowMarkerSeries->clear();
         m_nowCursorSeries->clear();
         m_summaryLabel->setText(QStringLiteral("No pass in the next 24h"));
+        m_axisEndAnchor = QDateTime();
         return;
     }
 
@@ -150,8 +151,20 @@ void PassCard::rebuildChartForPass()
         points.append(QPointF(double(p.utc.toMSecsSinceEpoch()), p.elevationDeg));
     }
     m_curveSeries->replace(points);
-    m_timeAxis->setRange(m_lastPass.curve.first().utc, m_lastPass.curve.last().utc);
     m_elevAxis->setRange(0.0, 90.0);
+
+    // A satellite CurrentlyInView reports aosUtc == the recompute window's
+    // start (i.e. "now"), which shifts every ~30s -- rescaling the time
+    // axis to that each cycle would make it creep forward mid-pass. Only
+    // rescale when this looks like a genuinely different pass (LOS/TCA far
+    // from the one the axis was last set for), not a refinement of the
+    // same one.
+    const QDateTime anchor = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.tcaUtc;
+    constexpr qint64 kSamePassToleranceSecs = 300;
+    if (!m_axisEndAnchor.isValid() || qAbs(m_axisEndAnchor.secsTo(anchor)) > kSamePassToleranceSecs) {
+        m_timeAxis->setRange(m_lastPass.curve.first().utc, m_lastPass.curve.last().utc);
+        m_axisEndAnchor = anchor;
+    }
 
     // Re-evaluated on the next tick(); default to red until then.
     m_areaIsGreen = false;

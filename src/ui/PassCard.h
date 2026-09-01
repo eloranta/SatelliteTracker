@@ -60,6 +60,12 @@ private:
     PassResult m_lastPass;
     std::unique_ptr<IOrbitPropagator> m_propagator;
     bool m_areaIsGreen = false;
+    // LOS (or TCA, if LOS unknown) the time axis range was last set from;
+    // used to tell "still the same pass, just refined" apart from "a new
+    // pass" so the axis doesn't creep forward every ~30s recompute while a
+    // satellite is CurrentlyInView (whose aosUtc is only "now", not the
+    // true rise time -- see PassResult's aosUtc comment).
+    QDateTime m_axisEndAnchor;
 
     QLabel *m_headerLabel = nullptr;
     QLabel *m_statusChip = nullptr;
