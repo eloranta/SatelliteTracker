@@ -57,9 +57,18 @@ SatelliteTracker downloads orbital elements (TLEs) for a user-selected set of sa
 | Apogee / Perigee (km) | Derived |
 | Next AOS | Computed next pass start for the configured observer, refreshed periodically |
 
-- Toolbar above the table: search/filter box (name or NORAD ID), source/group selector (e.g., Celestrak groups: `active`, `stations`, `weather`, `starlink`, or a Space-Track custom query), **Refresh** button, last-updated timestamp, row count.
+- Toolbar above the table: search/filter box (name or NORAD ID), source/group selector (e.g., Celestrak groups: `active`, `stations`, `weather`, `amateur`, `starlink`, or a Space-Track custom query), **Refresh** button, last-updated timestamp, row count.
 - Filter box does incremental filtering via a `QSortFilterProxyModel`.
 - Checkbox state persists across TLE refreshes (matched by NORAD ID) and across app restarts.
+
+**As built (M2):** the "Name" column above is the *full* Celestrak name (e.g.
+"OSCAR 7 (AO-7)") and exists in the model but is hidden by default; a **Short
+Name** column (the familiar designator pulled from the parenthetical, e.g.
+"AO-7"; special-cased to "ISS" rather than "ZARYA") takes its place as the
+visible name column. Search still matches against the full name too. Next AOS
+is computed only for satellites checked active — not the whole catalog, which
+can run to thousands of rows for groups like `active` — recomputed every 30s
+by `ActiveSatelliteTracker` off the UI thread; unchecked rows show "—".
 
 ---
 
@@ -163,6 +172,16 @@ Settings (key/value via QSettings, mirrored to DB for portability)
 └─ alert defaults, log retention days
 ```
 
+**As built (M2):** `is_active` is now live (Tab 2 checkbox, persisted via
+`SatelliteRepository::setSatelliteActive`). The `Settings` block's observer
+fields are implemented differently than planned above: the user enters a
+**Maidenhead grid locator** (e.g. `KP20`) plus an altitude in meters, not raw
+lat/lon directly — lat/lon are derived from the locator on every load, so the
+locator stays the single source of truth. Stored as `Observer/GridLocator`
+and `Observer/AltitudeMeters` via `QSettings` only (no DB mirror yet — not
+needed until something other than this one dialog needs to read it). `Pass`,
+`AlertRule`, and `AppLogEntry` remain unimplemented, on schedule for M4/M5.
+
 ---
 
 ## 7. Architecture
@@ -170,8 +189,8 @@ Settings (key/value via QSettings, mirrored to DB for portability)
 ### 7.1 Module breakdown
 
 Target layout (per the phased plan below, module contents grow into this as later
-milestones land — `Orbit/`, `AlertEngine/`, `workers/`, docks, and `SettingsDialog` don't
-exist yet as of M1):
+milestones land — as of M1, none of `Orbit/`, `AlertEngine/`, `workers/`, the docks, or
+`SettingsDialog` existed yet; see "Current layout (M2 additions)" below for what M2 added):
 ```
 SatelliteTracker/
 ├─ CMakeLists.txt
@@ -210,11 +229,30 @@ Space-Track client, no rate limiter); `data/` holds `Satellite.h`, `Database.*`,
 `Repository/` subfolders); `ui/` holds only `MainWindow.*`. See `README.md` for the
 build-verified file list.
 
+**Current layout (M2 additions):** `core/Orbit/` now exists as planned —
+`IOrbitPropagator.h` (interface), `Sgp4OrbitPropagator.*` (wraps the vendored
+library), `PassFinder.*` (AOS/TCA/LOS via coarse sampling + bisection). No
+separate `workers/PropagationWorker.*` was built, though — active-satellite
+recomputation lives in `core/ActiveSatelliteTracker.*`, which deliberately
+reuses the `QtConcurrent::run` + `QFutureWatcher` pattern `MainWindow`
+already used for TLE parsing, rather than introducing a second worker
+architecture. Also new: `core/Maidenhead.*` (grid locator ↔ lat/lon),
+`core/AppSettings.*` + `core/ObserverLocation.h` (the first `QSettings`
+usage), `ui/ObserverLocationDialog.*` (a minimal preview of the eventual M7
+`SettingsDialog`, scoped to just the observer location), and
+`third_party/sgp4/` — a vendored copy of `dnwrnr/sgp4` (Apache-2.0, pinned
+commit), built as its own static library target, since no SGP4 package
+exists for the MinGW/MSYS2 toolchain this project builds with (see §7.2/§9).
+`tests/orbit_tests.cpp` is no longer aspirational either — a small
+assert-and-exit-code executable wired via `enable_testing()`/`add_test()`,
+validating the Maidenhead formula and pass-finder invariants against real
+reference data (no new test-framework dependency).
+
 ### 7.2 Key libraries
 - **Qt 6 Widgets + Qt Charts** — UI and elevation plots.
 - **QtSql (SQLite driver)** — local persistence.
 - **QNetworkAccessManager** — HTTPS TLE downloads (Celestrak/Space-Track).
-- **SGP4 propagation** — a maintained C++ SGP4/SDP4 implementation (e.g., a vcpkg-available `libsgp4` port); wrapped behind an internal `IOrbitPropagator` interface so the library can be swapped without touching call sites.
+- **SGP4 propagation** — vendored as source (`third_party/sgp4/`, from `dnwrnr/sgp4`, Apache-2.0, pinned commit), not pulled via vcpkg, since the active toolchain is MinGW/MSYS2 (see §9) and no SGP4 package exists for it; wrapped behind an internal `IOrbitPropagator` interface (`Sgp4OrbitPropagator`) so the library can be swapped without touching call sites.
 - **Windows Credential Manager (via `wincred.h` or a thin Qt wrapper)** — secure storage for Space-Track credentials.
 
 ### 7.3 Threading model
@@ -243,9 +281,13 @@ build-verified file list.
   prebuilt `mingw-w64-x86_64-qt6-base` package (Widgets, Network, Sql w/ SQLite driver,
   Concurrent) — chosen to avoid building Qt6 from source under vcpkg. See `README.md` for
   the exact `pacman`/`cmake` steps.
-- **Toolchain (alternative):** MSVC (Visual Studio 2022 toolset) + vcpkg manifest mode
-  (`vcpkg.json`, still present in the repo) for Qt6, sqlite3, and the SGP4 library. Not the
-  active build path as of M1; the two toolchains aren't mixed in one build tree.
+- **Toolchain (alternative):** MSVC (Visual Studio 2022 toolset) + vcpkg manifest mode was
+  considered for Qt6, sqlite3, and the SGP4 library, but never set up in the tree — no
+  `vcpkg.json` exists here. A stray top-level `build/` directory from an earlier, abandoned
+  attempt at this (pointing at an MSVC `cl.exe`, with a broken `vcpkg-manifest-install.log`)
+  is left over but unused; the real build lives in `build/Desktop_Qt_6_9_0_MinGW_64_bit-Debug/`
+  (Qt Creator's MinGW/Ninja kit). MinGW/MSYS2 is the only active build path through M2; the
+  two toolchains aren't mixed in one build tree. SGP4 is vendored as source instead (§7.2).
 - **Packaging note:** `windeployqt` is used post-build to gather MinGW Qt DLLs/plugins
   next to the `.exe` for standalone runs outside the MSYS2 shell.
 - **CI (optional but recommended):** GitHub Actions Windows runner — configure, build, run unit tests (orbit math + TLE parsing are the highest-value things to test), and produce a packaged artifact.
@@ -257,7 +299,7 @@ build-verified file list.
 | Milestone | Deliverable | Status |
 |---|---|---|
 | M1 | TLE fetch (Celestrak first) + parsing + SQLite cache; Tab 2 catalog table (no checkboxes yet) | **Done** — see `README.md` |
-| M2 | SGP4 propagation + next-pass finder for a fixed observer; Tab 2 checkboxes wired to an "active satellites" list | Not started |
+| M2 | SGP4 propagation + next-pass finder for a fixed observer; Tab 2 checkboxes wired to an "active satellites" list | **Done** — vendored SGP4 (§7.2), Maidenhead-locator observer settings (§6), Next AOS scoped to active satellites only (§2) |
 | M3 | Tab 1 pass grid with live elevation charts for active satellites | Not started (Tab 1 is a placeholder) |
 | M4 | Alert engine (AOS/LOS/threshold) + tray notifications + Alerts dock | Not started |
 | M5 | Pass log + app event log + Log dock + CSV export | Not started |
@@ -268,7 +310,7 @@ build-verified file list.
 
 ## 11. Open Questions / Assumptions to Confirm
 
-- Observer location: assumed fixed and set once in Settings — confirm no need for "current GPS location" auto-detection.
+- ~~Observer location: assumed fixed and set once in Settings — confirm no need for "current GPS location" auto-detection.~~ **Resolved in M2:** no GPS auto-detection; fixed, set once via `ObserverLocationDialog` (Settings → Observer Location…). Entered as a Maidenhead grid locator rather than raw lat/lon (ham-radio-friendly and less error-prone to type than decimal coordinates), plus an altitude in meters.
 - Space-Track query scope: assumed on-demand per-satellite queries against the GP class; confirm if a full bulk catalog download (like Celestrak) is preferred instead to reduce request count.
 - Chart lookahead: assumed each Tab 1 card shows only the *next* pass; confirm whether a secondary "next 3 passes" mini-list per card is wanted in v1 or can wait.
 - No map/globe in v1 — confirm this is acceptable, since it's a common expectation for "satellite tracker" apps and could be a fast-follow (v1.1) using the existing propagation core.
