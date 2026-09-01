@@ -45,6 +45,7 @@ private:
     SatelliteModel *m_satelliteModel = nullptr;
     QSortFilterProxyModel *m_proxyModel = nullptr;
     QTimer *m_autoRefreshTimer = nullptr;
+    QTimer *m_retryTimer = nullptr;
 
     QTableView *m_catalogTable = nullptr;
     QLineEdit *m_searchEdit = nullptr;

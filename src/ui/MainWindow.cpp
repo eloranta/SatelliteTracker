@@ -25,6 +25,7 @@ namespace SatelliteTracker {
 
 namespace {
 constexpr qint64 kAutoRefreshIntervalMs = qint64(24) * 60 * 60 * 1000;
+constexpr qint64 kRetryIntervalMs = qint64(5) * 60 * 1000;
 }
 
 MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
@@ -38,6 +39,12 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
             this, &MainWindow::onFetchSucceeded);
     connect(m_celestrakClient, &CelestrakClient::fetchFailed,
             this, &MainWindow::onFetchFailed);
+
+    // Armed only after a failed fetch, to retry sooner than the 24h
+    // schedule would otherwise allow; cancelled whenever a fetch starts.
+    m_retryTimer = new QTimer(this);
+    m_retryTimer->setSingleShot(true);
+    connect(m_retryTimer, &QTimer::timeout, this, &MainWindow::onRefreshClicked);
 
     auto *tabs = new QTabWidget(this);
     tabs->addTab(buildPassGridTabPlaceholder(), QStringLiteral("Pass Grid"));
@@ -187,6 +194,7 @@ void MainWindow::setBusy(bool busy)
 
 void MainWindow::onRefreshClicked()
 {
+    m_retryTimer->stop();
     setBusy(true);
     m_statusLabel->setText(QStringLiteral("Fetching from Celestrak…"));
     const QString group = m_groupCombo->currentData().toString();
@@ -233,7 +241,10 @@ void MainWindow::onFetchFailed(const QString &group, const QString &errorMessage
 {
     Q_UNUSED(group);
     setBusy(false);
-    m_statusLabel->setText(QStringLiteral("Fetch failed: %1 (showing cached data)").arg(errorMessage));
+    m_statusLabel->setText(
+        QStringLiteral("Fetch failed: %1 (showing cached data, retrying in 5 min)")
+            .arg(errorMessage));
+    m_retryTimer->start(kRetryIntervalMs);
 }
 
 } // namespace SatelliteTracker
