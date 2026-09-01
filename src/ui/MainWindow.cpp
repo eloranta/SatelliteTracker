@@ -153,10 +153,11 @@ QWidget *MainWindow::buildCatalogTab()
     m_catalogTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_catalogTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_catalogTable->horizontalHeader()->setStretchLastSection(true);
-    m_catalogTable->horizontalHeader()->setSectionResizeMode(SatelliteModel::ColName,
+    m_catalogTable->horizontalHeader()->setSectionResizeMode(SatelliteModel::ColShortName,
                                                               QHeaderView::Stretch);
     m_catalogTable->horizontalHeader()->setSectionResizeMode(SatelliteModel::ColActive,
                                                               QHeaderView::ResizeToContents);
+    m_catalogTable->setColumnHidden(SatelliteModel::ColName, true);
     m_catalogTable->verticalHeader()->setVisible(false);
     layout->addWidget(m_catalogTable, 1);
 

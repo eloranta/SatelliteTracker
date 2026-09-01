@@ -151,8 +151,8 @@ QVariant SatelliteModel::headerData(int section, Qt::Orientation orientation, in
 
     switch (section) {
     case ColActive:         return QStringLiteral("Active");
-    case ColName:           return QStringLiteral("Name");
-    case ColShortName:      return QStringLiteral("Short Name");
+    case ColName:           return QStringLiteral("Full Name");
+    case ColShortName:      return QStringLiteral("Name");
     case ColNoradId:        return QStringLiteral("NORAD ID");
     case ColIntlDesignator: return QStringLiteral("Int'l Designator");
     case ColSource:         return QStringLiteral("Source");
