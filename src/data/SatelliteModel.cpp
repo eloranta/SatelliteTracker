@@ -8,9 +8,15 @@ namespace {
 
 // Celestrak names familiar satellites as "FULL NAME (SHORT-NAME)", e.g.
 // "OSCAR 7 (AO-7)" -- pull out the parenthesized part for the Short Name
-// column. Falls back to the full name when there's no such suffix.
+// column. ISS is the opposite: "ISS (ZARYA)" names the module in
+// parentheses, not the familiar name, so it's special-cased. Falls back to
+// the full name when there's no parenthetical suffix at all.
 QString extractShortName(const QString &name)
 {
+    if (name.startsWith(QLatin1String("ISS "))) {
+        return QStringLiteral("ISS");
+    }
+
     static const QRegularExpression pattern(QStringLiteral("\\(([^()]+)\\)\\s*$"));
     const QRegularExpressionMatch match = pattern.match(name);
     return match.hasMatch() ? match.captured(1) : name;
