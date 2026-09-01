@@ -42,6 +42,8 @@ add_executable(SatelliteTracker
     src/ui/MainWindow.cpp
     src/ui/ObserverLocationDialog.h
     src/ui/ObserverLocationDialog.cpp
+    src/ui/PassCard.h
+    src/ui/PassCard.cpp
 )
 
 target_include_directories(SatelliteTracker PRIVATE src)

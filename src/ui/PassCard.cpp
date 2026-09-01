@@ -1,0 +1,185 @@
+#include "PassCard.h"
+
+#include <QChart>
+#include <QChartView>
+#include <QDateTimeAxis>
+#include <QLabel>
+#include <QLineSeries>
+#include <QMouseEvent>
+#include <QScatterSeries>
+#include <QValueAxis>
+#include <QVBoxLayout>
+
+#include "../core/Orbit/Sgp4OrbitPropagator.h"
+#include "../core/SatelliteNaming.h"
+
+namespace SatelliteTracker {
+
+namespace {
+constexpr int kImminentSeconds = 5 * 60;
+}
+
+PassCard::PassCard(const Satellite &satellite, QWidget *parent)
+    : QFrame(parent)
+{
+    setFrameShape(QFrame::StyledPanel);
+
+    auto *layout = new QVBoxLayout(this);
+
+    auto *headerRow = new QHBoxLayout();
+    m_headerLabel = new QLabel(this);
+    QFont headerFont = m_headerLabel->font();
+    headerFont.setBold(true);
+    m_headerLabel->setFont(headerFont);
+    m_statusChip = new QLabel(this);
+    m_statusChip->setStyleSheet(QStringLiteral("color: #888;"));
+    headerRow->addWidget(m_headerLabel, 1);
+    headerRow->addWidget(m_statusChip);
+    layout->addLayout(headerRow);
+
+    m_chart = new QChart();
+    m_chart->legend()->hide();
+    m_chart->setMargins(QMargins(4, 4, 4, 4));
+
+    m_curveSeries = new QLineSeries();
+    m_nowMarkerSeries = new QScatterSeries();
+    m_nowMarkerSeries->setMarkerSize(10.0);
+    m_chart->addSeries(m_curveSeries);
+    m_chart->addSeries(m_nowMarkerSeries);
+
+    m_timeAxis = new QDateTimeAxis();
+    m_timeAxis->setFormat(QStringLiteral("HH:mm:ss"));
+    m_elevAxis = new QValueAxis();
+    m_elevAxis->setTitleText(QStringLiteral("Elevation (°)"));
+    m_elevAxis->setRange(0.0, 90.0);
+    m_chart->addAxis(m_timeAxis, Qt::AlignBottom);
+    m_chart->addAxis(m_elevAxis, Qt::AlignLeft);
+    m_curveSeries->attachAxis(m_timeAxis);
+    m_curveSeries->attachAxis(m_elevAxis);
+    m_nowMarkerSeries->attachAxis(m_timeAxis);
+    m_nowMarkerSeries->attachAxis(m_elevAxis);
+
+    m_chartView = new QChartView(m_chart, this);
+    m_chartView->setRenderHint(QPainter::Antialiasing);
+    m_chartView->setMinimumHeight(180);
+    layout->addWidget(m_chartView, 1);
+
+    m_summaryLabel = new QLabel(this);
+    m_summaryLabel->setStyleSheet(QStringLiteral("color: #888;"));
+    m_summaryLabel->setWordWrap(true);
+    layout->addWidget(m_summaryLabel);
+
+    updateSatellite(satellite);
+    rebuildChartForPass();
+}
+
+void PassCard::updateSatellite(const Satellite &satellite)
+{
+    const bool tleChanged = satellite.tleLine1 != m_satellite.tleLine1
+                          || satellite.tleLine2 != m_satellite.tleLine2;
+    m_satellite = satellite;
+
+    m_headerLabel->setText(QStringLiteral("%1 (%2)")
+                                .arg(SatelliteNaming::shortName(satellite.name))
+                                .arg(satellite.noradId));
+
+    if (tleChanged || !m_propagator) {
+        auto propagator = std::make_unique<Sgp4OrbitPropagator>();
+        propagator->loadTle(satellite.tleLine1, satellite.tleLine2);
+        m_propagator = std::move(propagator);
+    }
+}
+
+void PassCard::setObserverLocation(const ObserverLocation &location)
+{
+    m_location = location;
+}
+
+void PassCard::setPassResult(const PassResult &pass)
+{
+    m_lastPass = pass;
+    rebuildChartForPass();
+}
+
+void PassCard::rebuildChartForPass()
+{
+    if (m_lastPass.state == PassState::NoPassInWindow || m_lastPass.curve.isEmpty()) {
+        m_curveSeries->clear();
+        m_nowMarkerSeries->clear();
+        m_summaryLabel->setText(QStringLiteral("No pass in the next 24h"));
+        return;
+    }
+
+    QList<QPointF> points;
+    points.reserve(m_lastPass.curve.size());
+    double maxElev = 10.0;
+    for (const ElevationPoint &p : m_lastPass.curve) {
+        points.append(QPointF(double(p.utc.toMSecsSinceEpoch()), p.elevationDeg));
+        maxElev = qMax(maxElev, p.elevationDeg);
+    }
+    m_curveSeries->replace(points);
+    m_timeAxis->setRange(m_lastPass.curve.first().utc, m_lastPass.curve.last().utc);
+    m_elevAxis->setRange(0.0, qMin(90.0, maxElev + 5.0));
+
+    const QString aosText = m_lastPass.state == PassState::CurrentlyInView
+        ? QStringLiteral("in view")
+        : m_lastPass.aosUtc.toString(QStringLiteral("HH:mm:ss"));
+    const QString losText = m_lastPass.losUtc.isValid()
+        ? m_lastPass.losUtc.toString(QStringLiteral("HH:mm:ss"))
+        : QStringLiteral("—");
+
+    m_summaryLabel->setText(
+        QStringLiteral("AOS %1 · TCA %2 (%3° az %4°) · LOS %5")
+            .arg(aosText, m_lastPass.tcaUtc.toString(QStringLiteral("HH:mm:ss")),
+                 QString::number(m_lastPass.maxElevationDeg, 'f', 0),
+                 QString::number(m_lastPass.maxElevAzimuthDeg, 'f', 0), losText));
+}
+
+void PassCard::tick(const QDateTime &nowUtc)
+{
+    if (!m_propagator || !m_location.isConfigured) {
+        m_nowMarkerSeries->clear();
+        m_statusChip->setText(QStringLiteral("Idle"));
+        return;
+    }
+
+    const LookAngle look = m_propagator->computeLookAngle(
+        nowUtc, m_location.latitudeDeg, m_location.longitudeDeg, m_location.altitudeMeters);
+    const double elevNow = look.valid ? look.elevationDeg : -90.0;
+
+    if (elevNow > 0.0) {
+        m_nowMarkerSeries->replace({QPointF(double(nowUtc.toMSecsSinceEpoch()), elevNow)});
+    } else {
+        m_nowMarkerSeries->clear();
+    }
+
+    m_statusChip->setText(statusFor(nowUtc, elevNow, look.valid));
+}
+
+QString PassCard::statusFor(const QDateTime &nowUtc, double elevationNowDeg, bool haveFix) const
+{
+    if (m_lastPass.state == PassState::NoPassInWindow) {
+        return QStringLiteral("No upcoming pass");
+    }
+    if (!haveFix) {
+        return QStringLiteral("Idle");
+    }
+    if (elevationNowDeg > 0.0) {
+        return nowUtc <= m_lastPass.tcaUtc ? QStringLiteral("In View") : QStringLiteral("Setting");
+    }
+    if (m_lastPass.aosUtc.isValid()) {
+        const qint64 secsToAos = nowUtc.secsTo(m_lastPass.aosUtc);
+        if (secsToAos >= 0 && secsToAos <= kImminentSeconds) {
+            return QStringLiteral("Rising");
+        }
+    }
+    return QStringLiteral("Idle");
+}
+
+void PassCard::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    // Detail dialog wired in once PassDetailDialog exists (next step).
+    QFrame::mouseDoubleClickEvent(event);
+}
+
+} // namespace SatelliteTracker
