@@ -120,14 +120,12 @@ void PassCard::rebuildChartForPass()
 
     QList<QPointF> points;
     points.reserve(m_lastPass.curve.size());
-    double maxElev = 10.0;
     for (const ElevationPoint &p : m_lastPass.curve) {
         points.append(QPointF(double(p.utc.toMSecsSinceEpoch()), p.elevationDeg));
-        maxElev = qMax(maxElev, p.elevationDeg);
     }
     m_curveSeries->replace(points);
     m_timeAxis->setRange(m_lastPass.curve.first().utc, m_lastPass.curve.last().utc);
-    m_elevAxis->setRange(0.0, qMin(90.0, maxElev + 5.0));
+    m_elevAxis->setRange(0.0, 90.0);
 
     const QString aosText = m_lastPass.state == PassState::CurrentlyInView
         ? QStringLiteral("in view")
