@@ -11,13 +11,19 @@ QString shortName(const QString &fullName)
         return QStringLiteral("ISS");
     }
 
-    // A handful of satellites have their common designator OUTSIDE the
-    // parentheses on Celestrak, the reverse of the usual "FULL NAME
-    // (SHORT-NAME)" convention (like ISS above) -- e.g. AO-91 is listed as
-    // "RADFXSAT (FOX-1B)", so the regex below would otherwise return
-    // "FOX-1B" and the satellite would look absent under its familiar name.
+    // A handful of satellites don't follow Celestrak's usual "FULL NAME
+    // (SHORT-NAME)" convention at all -- either the common designator is
+    // outside the parens (like ISS above), or there's no parenthetical
+    // suffix, or none at all matching the familiar name -- so the regex
+    // below would otherwise return the wrong thing (or the whole ugly full
+    // name) and the satellite would look absent under its familiar name.
+    // Each entry here was confirmed directly against a live Celestrak
+    // amateur-group fetch, not guessed from memory.
     static const QHash<QString, QString> knownAliases = {
         {QStringLiteral("RADFXSAT (FOX-1B)"), QStringLiteral("AO-91")},
+        {QStringLiteral("DIWATA-2B"), QStringLiteral("PO-101")},
+        {QStringLiteral("LILACSAT-2"), QStringLiteral("CAS-3H")},
+        {QStringLiteral("RS-44 & BREEZE-KM R/B"), QStringLiteral("RS-44")},
     };
     const auto aliasIt = knownAliases.find(fullName);
     if (aliasIt != knownAliases.end()) {
