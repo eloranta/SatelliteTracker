@@ -162,6 +162,7 @@ QWidget *MainWindow::buildCatalogTab()
         m_catalogTable->setColumnHidden(col, !kVisibleColumns.contains(col));
     }
     m_catalogTable->verticalHeader()->setVisible(false);
+    m_catalogTable->sortByColumn(SatelliteModel::ColShortName, Qt::AscendingOrder);
     layout->addWidget(m_catalogTable, 1);
 
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString &text) {
