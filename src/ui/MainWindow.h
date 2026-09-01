@@ -18,11 +18,12 @@ namespace SatelliteTracker {
 
 class ActiveSatelliteTracker;
 class CelestrakClient;
+class PassGridWidget;
 class SatelliteModel;
 class SatelliteRepository;
 
-// Top-level window: a QTabWidget with Tab 1 (Pass Grid — placeholder until
-// M3) and Tab 2 (Satellite Catalog — implemented in M1).
+// Top-level window: a QTabWidget with Tab 1 (Pass Grid, M3) and Tab 2
+// (Satellite Catalog, M1/M2).
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -37,7 +38,7 @@ private slots:
     void onObserverLocationTriggered();
 
 private:
-    QWidget *buildPassGridTabPlaceholder();
+    QWidget *buildPassGridTab();
     QWidget *buildCatalogTab();
     void reloadModelFromCache();
     void setBusy(bool busy);
@@ -56,6 +57,7 @@ private:
     SatelliteRepository *m_repository = nullptr;
     CelestrakClient *m_celestrakClient = nullptr;
     ActiveSatelliteTracker *m_activeTracker = nullptr;
+    PassGridWidget *m_passGridWidget = nullptr;
     SatelliteModel *m_satelliteModel = nullptr;
     QSortFilterProxyModel *m_proxyModel = nullptr;
     QTimer *m_autoRefreshTimer = nullptr;

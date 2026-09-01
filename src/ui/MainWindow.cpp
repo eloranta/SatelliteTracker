@@ -26,6 +26,7 @@
 #include "../data/SatelliteModel.h"
 #include "../data/SatelliteRepository.h"
 #include "ObserverLocationDialog.h"
+#include "PassGridWidget.h"
 
 namespace SatelliteTracker {
 
@@ -62,11 +63,14 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
                              this, &MainWindow::onObserverLocationTriggered);
 
     auto *tabs = new QTabWidget(this);
-    tabs->addTab(buildPassGridTabPlaceholder(), QStringLiteral("Pass Grid"));
+    tabs->addTab(buildPassGridTab(), QStringLiteral("Pass Grid"));
     tabs->addTab(buildCatalogTab(), QStringLiteral("Satellite Catalog"));
     setCentralWidget(tabs);
 
     connect(m_satelliteModel, &SatelliteModel::activeChanged, this, &MainWindow::onActiveToggled);
+    connect(m_activeTracker, &ActiveSatelliteTracker::passesUpdated,
+            m_passGridWidget, &PassGridWidget::applyPassResults);
+    m_passGridWidget->setObserverLocation(AppSettings::loadObserverLocation());
 
     setWindowTitle(QStringLiteral("SatelliteTracker"));
     resize(1100, 700);
@@ -81,22 +85,10 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     startAutoRefreshSchedule();
 }
 
-QWidget *MainWindow::buildPassGridTabPlaceholder()
+QWidget *MainWindow::buildPassGridTab()
 {
-    auto *placeholder = new QWidget(this);
-    auto *layout = new QVBoxLayout(placeholder);
-    auto *label = new QLabel(
-        QStringLiteral("Pass Grid dashboard arrives in M3.\n\n"
-                        "Check satellites active in the Satellite Catalog tab once M2 adds "
-                        "the watchlist checkboxes — their next-pass elevation charts will "
-                        "appear here."),
-        placeholder);
-    label->setAlignment(Qt::AlignCenter);
-    label->setStyleSheet(QStringLiteral("color: #888; font-size: 14px;"));
-    layout->addStretch();
-    layout->addWidget(label);
-    layout->addStretch();
-    return placeholder;
+    m_passGridWidget = new PassGridWidget(this);
+    return m_passGridWidget;
 }
 
 QWidget *MainWindow::buildCatalogTab()
@@ -217,6 +209,7 @@ void MainWindow::pushActiveSatellitesAndRecompute()
 
     m_activeTracker->setActiveSatellites(active);
     m_activeTracker->requestRecompute();
+    m_passGridWidget->setActiveSatellites(active);
 }
 
 void MainWindow::startAutoRefreshSchedule()
@@ -325,8 +318,10 @@ void MainWindow::onObserverLocationTriggered()
         return;
     }
 
-    m_activeTracker->setObserverLocation(AppSettings::loadObserverLocation());
+    const ObserverLocation newLocation = AppSettings::loadObserverLocation();
+    m_activeTracker->setObserverLocation(newLocation);
     m_activeTracker->requestRecompute();
+    m_passGridWidget->setObserverLocation(newLocation);
 }
 
 } // namespace SatelliteTracker
