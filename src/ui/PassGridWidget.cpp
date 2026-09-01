@@ -48,6 +48,7 @@ void PassGridWidget::setActiveSatellites(const QVector<Satellite> &activeSatelli
         if (it == m_cardsByNoradId.end()) {
             auto *card = new PassCard(s, m_content);
             card->setObserverLocation(m_location);
+            connect(card, &PassCard::visibilityMaybeChanged, this, &PassGridWidget::reflow);
             m_cardsByNoradId.insert(s.noradId, card);
         } else {
             it.value()->updateSatellite(s);
@@ -89,8 +90,18 @@ void PassGridWidget::reflow()
     QList<int> noradIds = m_cardsByNoradId.keys();
     std::sort(noradIds.begin(), noradIds.end());
 
-    for (int i = 0; i < noradIds.size(); ++i) {
-        m_gridLayout->addWidget(m_cardsByNoradId.value(noradIds.at(i)), i / kColumns, i % kColumns);
+    // Cards past their LOS hide themselves (see PassCard::tick) and are
+    // excluded here -- removeWidget so a hidden card doesn't keep reserving
+    // its old grid cell -- until their next pass shows them again.
+    int visibleIndex = 0;
+    for (int noradId : noradIds) {
+        PassCard *card = m_cardsByNoradId.value(noradId);
+        if (card->isHidden()) {
+            m_gridLayout->removeWidget(card);
+            continue;
+        }
+        m_gridLayout->addWidget(card, visibleIndex / kColumns, visibleIndex % kColumns);
+        ++visibleIndex;
     }
 }
 

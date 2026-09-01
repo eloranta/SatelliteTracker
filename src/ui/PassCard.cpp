@@ -1,5 +1,6 @@
 #include "PassCard.h"
 
+#include <QAreaSeries>
 #include <QChart>
 #include <QChartView>
 #include <QDateTimeAxis>
@@ -18,6 +19,8 @@ namespace SatelliteTracker {
 
 namespace {
 constexpr int kImminentSeconds = 5 * 60;
+const QColor kBeforeAosColor(220, 60, 60, 180);  // red: not yet risen
+const QColor kAfterAosColor(60, 180, 90, 180);   // green: risen (AOS reached)
 }
 
 PassCard::PassCard(const Satellite &satellite, QWidget *parent)
@@ -46,10 +49,17 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
     m_chart->legend()->hide();
     m_chart->setMargins(QMargins(2, 2, 2, 2));
 
+    // m_curveSeries is never added to the chart directly -- it's just the
+    // data source for m_areaSeries, whose fill color flips red/green in
+    // tick() based on whether AOS has been reached yet.
     m_curveSeries = new QLineSeries();
+    m_areaSeries = new QAreaSeries(m_curveSeries);
+    m_areaSeries->setColor(kBeforeAosColor);
+    m_areaSeries->setPen(Qt::NoPen);
+
     m_nowMarkerSeries = new QScatterSeries();
     m_nowMarkerSeries->setMarkerSize(10.0);
-    m_chart->addSeries(m_curveSeries);
+    m_chart->addSeries(m_areaSeries);
     m_chart->addSeries(m_nowMarkerSeries);
 
     m_timeAxis = new QDateTimeAxis();
@@ -59,8 +69,8 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
     m_elevAxis->setRange(0.0, 90.0);
     m_chart->addAxis(m_timeAxis, Qt::AlignBottom);
     m_chart->addAxis(m_elevAxis, Qt::AlignLeft);
-    m_curveSeries->attachAxis(m_timeAxis);
-    m_curveSeries->attachAxis(m_elevAxis);
+    m_areaSeries->attachAxis(m_timeAxis);
+    m_areaSeries->attachAxis(m_elevAxis);
     m_nowMarkerSeries->attachAxis(m_timeAxis);
     m_nowMarkerSeries->attachAxis(m_elevAxis);
 
@@ -107,6 +117,11 @@ void PassCard::setPassResult(const PassResult &pass)
 {
     m_lastPass = pass;
     rebuildChartForPass();
+
+    if (pass.state != PassState::NoPassInWindow && isHidden()) {
+        show();
+        emit visibilityMaybeChanged();
+    }
 }
 
 void PassCard::rebuildChartForPass()
@@ -127,6 +142,10 @@ void PassCard::rebuildChartForPass()
     m_timeAxis->setRange(m_lastPass.curve.first().utc, m_lastPass.curve.last().utc);
     m_elevAxis->setRange(0.0, 90.0);
 
+    // Re-evaluated on the next tick(); default to red until then.
+    m_areaIsGreen = false;
+    m_areaSeries->setColor(kBeforeAosColor);
+
     const QString aosText = m_lastPass.state == PassState::CurrentlyInView
         ? QStringLiteral("in view")
         : m_lastPass.aosUtc.toString(QStringLiteral("HH:mm:ss"));
@@ -143,6 +162,16 @@ void PassCard::rebuildChartForPass()
 
 void PassCard::tick(const QDateTime &nowUtc)
 {
+    // Pass is over: hide until a fresh PassResult (its next upcoming pass)
+    // arrives via setPassResult(), rather than showing a stale, ended pass.
+    if (m_lastPass.losUtc.isValid() && nowUtc > m_lastPass.losUtc) {
+        if (!isHidden()) {
+            hide();
+            emit visibilityMaybeChanged();
+        }
+        return;
+    }
+
     if (!m_propagator || !m_location.isConfigured) {
         m_nowMarkerSeries->clear();
         m_statusChip->setText(QStringLiteral("Idle"));
@@ -157,6 +186,15 @@ void PassCard::tick(const QDateTime &nowUtc)
         m_nowMarkerSeries->replace({QPointF(double(nowUtc.toMSecsSinceEpoch()), elevNow)});
     } else {
         m_nowMarkerSeries->clear();
+    }
+
+    if (m_lastPass.state != PassState::NoPassInWindow) {
+        const bool aosReached = m_lastPass.state == PassState::CurrentlyInView
+                              || (m_lastPass.aosUtc.isValid() && nowUtc >= m_lastPass.aosUtc);
+        if (aosReached != m_areaIsGreen) {
+            m_areaIsGreen = aosReached;
+            m_areaSeries->setColor(aosReached ? kAfterAosColor : kBeforeAosColor);
+        }
     }
 
     m_statusChip->setText(statusFor(nowUtc, elevNow, look.valid));

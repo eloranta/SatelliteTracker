@@ -13,6 +13,7 @@ class QLabel;
 class QChartView;
 class QChart;
 class QLineSeries;
+class QAreaSeries;
 class QScatterSeries;
 class QValueAxis;
 class QDateTimeAxis;
@@ -24,6 +25,12 @@ namespace SatelliteTracker {
 // "now" marker and status chip (updated every 1s via tick()). Owns its own
 // propagator so per-second updates don't need to go back through
 // ActiveSatelliteTracker's off-thread recompute cycle.
+//
+// The area under the curve is red before AOS (not yet visible) and green
+// from AOS onward; once LOS passes the card hides itself (still alive,
+// still receiving updates -- just excluded from PassGridWidget's layout
+// until its next pass arrives) and emits visibilityMaybeChanged() so the
+// grid can reflow around it.
 class PassCard : public QFrame {
     Q_OBJECT
 public:
@@ -38,6 +45,9 @@ public:
     void setPassResult(const PassResult &pass);
     void tick(const QDateTime &nowUtc);
 
+signals:
+    void visibilityMaybeChanged();
+
 protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
 
@@ -49,6 +59,7 @@ private:
     ObserverLocation m_location;
     PassResult m_lastPass;
     std::unique_ptr<IOrbitPropagator> m_propagator;
+    bool m_areaIsGreen = false;
 
     QLabel *m_headerLabel = nullptr;
     QLabel *m_statusChip = nullptr;
@@ -57,6 +68,7 @@ private:
     QChartView *m_chartView = nullptr;
     QChart *m_chart = nullptr;
     QLineSeries *m_curveSeries = nullptr;
+    QAreaSeries *m_areaSeries = nullptr;
     QScatterSeries *m_nowMarkerSeries = nullptr;
     QValueAxis *m_elevAxis = nullptr;
     QDateTimeAxis *m_timeAxis = nullptr;
