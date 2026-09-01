@@ -70,6 +70,7 @@ private:
     QLineSeries *m_curveSeries = nullptr;
     QAreaSeries *m_areaSeries = nullptr;
     QScatterSeries *m_nowMarkerSeries = nullptr;
+    QLineSeries *m_nowCursorSeries = nullptr; // vertical line at "now", shown only AOS..LOS
     QValueAxis *m_elevAxis = nullptr;
     QDateTimeAxis *m_timeAxis = nullptr;
 };

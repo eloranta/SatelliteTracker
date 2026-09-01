@@ -59,7 +59,15 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
 
     m_nowMarkerSeries = new QScatterSeries();
     m_nowMarkerSeries->setMarkerSize(10.0);
+
+    m_nowCursorSeries = new QLineSeries();
+    QPen cursorPen(QColor(40, 40, 40));
+    cursorPen.setStyle(Qt::DashLine);
+    cursorPen.setWidth(1);
+    m_nowCursorSeries->setPen(cursorPen);
+
     m_chart->addSeries(m_areaSeries);
+    m_chart->addSeries(m_nowCursorSeries);
     m_chart->addSeries(m_nowMarkerSeries);
 
     m_timeAxis = new QDateTimeAxis();
@@ -71,6 +79,8 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
     m_chart->addAxis(m_elevAxis, Qt::AlignLeft);
     m_areaSeries->attachAxis(m_timeAxis);
     m_areaSeries->attachAxis(m_elevAxis);
+    m_nowCursorSeries->attachAxis(m_timeAxis);
+    m_nowCursorSeries->attachAxis(m_elevAxis);
     m_nowMarkerSeries->attachAxis(m_timeAxis);
     m_nowMarkerSeries->attachAxis(m_elevAxis);
 
@@ -129,6 +139,7 @@ void PassCard::rebuildChartForPass()
     if (m_lastPass.state == PassState::NoPassInWindow || m_lastPass.curve.isEmpty()) {
         m_curveSeries->clear();
         m_nowMarkerSeries->clear();
+        m_nowCursorSeries->clear();
         m_summaryLabel->setText(QStringLiteral("No pass in the next 24h"));
         return;
     }
@@ -174,6 +185,7 @@ void PassCard::tick(const QDateTime &nowUtc)
 
     if (!m_propagator || !m_location.isConfigured) {
         m_nowMarkerSeries->clear();
+        m_nowCursorSeries->clear();
         m_statusChip->setText(QStringLiteral("Idle"));
         return;
     }
@@ -194,6 +206,16 @@ void PassCard::tick(const QDateTime &nowUtc)
         if (aosReached != m_areaIsGreen) {
             m_areaIsGreen = aosReached;
             m_areaSeries->setColor(aosReached ? kAfterAosColor : kBeforeAosColor);
+        }
+
+        // tick() already returned above once nowUtc passed losUtc, so
+        // aosReached here means "between AOS and LOS" -- draw the vertical
+        // now-cursor only for that span.
+        if (aosReached) {
+            const double x = double(nowUtc.toMSecsSinceEpoch());
+            m_nowCursorSeries->replace({QPointF(x, 0.0), QPointF(x, 90.0)});
+        } else {
+            m_nowCursorSeries->clear();
         }
     }
 
