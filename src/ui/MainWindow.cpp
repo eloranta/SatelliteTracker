@@ -11,6 +11,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSet>
 #include <QSortFilterProxyModel>
 #include <QTabWidget>
 #include <QTableView>
@@ -157,7 +158,17 @@ QWidget *MainWindow::buildCatalogTab()
                                                               QHeaderView::Stretch);
     m_catalogTable->horizontalHeader()->setSectionResizeMode(SatelliteModel::ColActive,
                                                               QHeaderView::ResizeToContents);
-    m_catalogTable->setColumnHidden(SatelliteModel::ColName, true);
+    // Only these columns are shown by default; the rest (full name, NORAD ID,
+    // designator, source, epoch, and derived orbital elements) stay in the
+    // model -- still searchable, just not displayed -- to keep the table
+    // focused on what a ham-satellite user checks at a glance.
+    static const QSet<int> kVisibleColumns = {
+        SatelliteModel::ColActive, SatelliteModel::ColShortName,
+        SatelliteModel::ColMode, SatelliteModel::ColNextAos,
+    };
+    for (int col = 0; col < SatelliteModel::ColumnCount; ++col) {
+        m_catalogTable->setColumnHidden(col, !kVisibleColumns.contains(col));
+    }
     m_catalogTable->verticalHeader()->setVisible(false);
     layout->addWidget(m_catalogTable, 1);
 
