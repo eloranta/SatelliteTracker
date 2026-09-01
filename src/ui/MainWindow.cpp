@@ -7,6 +7,8 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSortFilterProxyModel>
@@ -16,10 +18,13 @@
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrent>
 
+#include "../core/ActiveSatelliteTracker.h"
+#include "../core/AppSettings.h"
 #include "../core/CelestrakClient.h"
 #include "../core/TleParser.h"
 #include "../data/SatelliteModel.h"
 #include "../data/SatelliteRepository.h"
+#include "ObserverLocationDialog.h"
 
 namespace SatelliteTracker {
 
@@ -35,6 +40,11 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     m_repository = new SatelliteRepository(m_dbConnectionName);
     m_celestrakClient = new CelestrakClient(this);
 
+    m_activeTracker = new ActiveSatelliteTracker(this);
+    connect(m_activeTracker, &ActiveSatelliteTracker::passesUpdated,
+            this, &MainWindow::onPassesUpdated);
+    m_activeTracker->setObserverLocation(AppSettings::loadObserverLocation());
+
     connect(m_celestrakClient, &CelestrakClient::fetchSucceeded,
             this, &MainWindow::onFetchSucceeded);
     connect(m_celestrakClient, &CelestrakClient::fetchFailed,
@@ -46,10 +56,16 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     m_retryTimer->setSingleShot(true);
     connect(m_retryTimer, &QTimer::timeout, this, &MainWindow::onRefreshClicked);
 
+    QMenu *settingsMenu = menuBar()->addMenu(QStringLiteral("&Settings"));
+    settingsMenu->addAction(QStringLiteral("Observer Location…"),
+                             this, &MainWindow::onObserverLocationTriggered);
+
     auto *tabs = new QTabWidget(this);
     tabs->addTab(buildPassGridTabPlaceholder(), QStringLiteral("Pass Grid"));
     tabs->addTab(buildCatalogTab(), QStringLiteral("Satellite Catalog"));
     setCentralWidget(tabs);
+
+    connect(m_satelliteModel, &SatelliteModel::activeChanged, this, &MainWindow::onActiveToggled);
 
     setWindowTitle(QStringLiteral("SatelliteTracker"));
     resize(1100, 700);
@@ -57,6 +73,10 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     // Show cached data immediately, then refresh only if the cache is
     // missing or stale; either way, arm the 24h auto-refresh timer.
     reloadModelFromCache();
+    if (!AppSettings::loadObserverLocation().isConfigured) {
+        m_statusLabel->setText(
+            QStringLiteral("Set observer location to compute Next AOS — Settings → Observer Location…"));
+    }
     startAutoRefreshSchedule();
 }
 
@@ -135,6 +155,8 @@ QWidget *MainWindow::buildCatalogTab()
     m_catalogTable->horizontalHeader()->setStretchLastSection(true);
     m_catalogTable->horizontalHeader()->setSectionResizeMode(SatelliteModel::ColName,
                                                               QHeaderView::Stretch);
+    m_catalogTable->horizontalHeader()->setSectionResizeMode(SatelliteModel::ColActive,
+                                                              QHeaderView::ResizeToContents);
     m_catalogTable->verticalHeader()->setVisible(false);
     layout->addWidget(m_catalogTable, 1);
 
@@ -166,6 +188,23 @@ void MainWindow::reloadModelFromCache()
             QStringLiteral("Cache last updated: %1 UTC")
                 .arg(lastUpdated.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))));
     }
+
+    pushActiveSatellitesAndRecompute();
+}
+
+void MainWindow::pushActiveSatellitesAndRecompute()
+{
+    QString error;
+    const QVector<Satellite> all = m_repository->getAllSatellites(QString(), &error);
+    if (!error.isEmpty()) return;
+
+    QVector<Satellite> active;
+    for (const Satellite &s : all) {
+        if (s.isActive) active.push_back(s);
+    }
+
+    m_activeTracker->setActiveSatellites(active);
+    m_activeTracker->requestRecompute();
 }
 
 void MainWindow::startAutoRefreshSchedule()
@@ -246,6 +285,36 @@ void MainWindow::onFetchFailed(const QString &group, const QString &errorMessage
         QStringLiteral("Fetch failed: %1 (showing cached data, retrying in 5 min)")
             .arg(errorMessage));
     m_retryTimer->start(kRetryIntervalMs);
+}
+
+void MainWindow::onActiveToggled(int noradId, bool active)
+{
+    QString error;
+    if (!m_repository->setSatelliteActive(noradId, active, &error)) {
+        m_statusLabel->setText(QStringLiteral("Failed to save active state: %1").arg(error));
+    }
+    pushActiveSatellitesAndRecompute();
+}
+
+void MainWindow::onPassesUpdated(const QHash<int, PassResult> &resultsByNoradId)
+{
+    m_satelliteModel->applyPassResults(resultsByNoradId);
+}
+
+void MainWindow::onObserverLocationTriggered()
+{
+    ObserverLocationDialog dialog(AppSettings::loadObserverLocation(), this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    QString error;
+    if (!AppSettings::saveObserverLocation(dialog.result(), &error)) {
+        QMessageBox::warning(this, QStringLiteral("SatelliteTracker"),
+                              QStringLiteral("Could not save observer location:\n%1").arg(error));
+        return;
+    }
+
+    m_activeTracker->setObserverLocation(AppSettings::loadObserverLocation());
+    m_activeTracker->requestRecompute();
 }
 
 } // namespace SatelliteTracker
