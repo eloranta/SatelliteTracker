@@ -125,4 +125,52 @@ QVector<Satellite> SatelliteRepository::getAllSatellites(QString *errorOut) cons
     return result;
 }
 
+QDateTime SatelliteRepository::getLastCatalogUpdateUtc(QString *errorOut) const
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.isOpen()) {
+        if (errorOut) *errorOut = QStringLiteral("Database connection is not open");
+        return QDateTime();
+    }
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "SELECT value FROM catalog_metadata WHERE key = :key"));
+    q.bindValue(QStringLiteral(":key"), QStringLiteral("last_updated_utc"));
+
+    if (!q.exec()) {
+        if (errorOut) *errorOut = q.lastError().text();
+        return QDateTime();
+    }
+
+    if (!q.next()) {
+        return QDateTime();
+    }
+
+    return QDateTime::fromString(q.value(0).toString(), Qt::ISODate);
+}
+
+bool SatelliteRepository::setLastCatalogUpdateUtc(const QDateTime &utc, QString *errorOut)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.isOpen()) {
+        if (errorOut) *errorOut = QStringLiteral("Database connection is not open");
+        return false;
+    }
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "INSERT INTO catalog_metadata (key, value) VALUES (:key, :value)"
+        " ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
+    q.bindValue(QStringLiteral(":key"), QStringLiteral("last_updated_utc"));
+    q.bindValue(QStringLiteral(":value"), utc.toUTC().toString(Qt::ISODate));
+
+    if (!q.exec()) {
+        if (errorOut) *errorOut = q.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace SatelliteTracker

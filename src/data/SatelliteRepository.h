@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QSqlDatabase>
 #include <QString>
 #include <QVector>
@@ -20,6 +21,13 @@ public:
 
     // Returns every cached satellite, ordered by name.
     QVector<Satellite> getAllSatellites(QString *errorOut = nullptr) const;
+
+    // UTC timestamp of the last successful catalog refresh from Celestrak.
+    // Returns an invalid QDateTime if the catalog has never been refreshed.
+    QDateTime getLastCatalogUpdateUtc(QString *errorOut = nullptr) const;
+
+    // Records `utc` as the moment the catalog was last refreshed.
+    bool setLastCatalogUpdateUtc(const QDateTime &utc, QString *errorOut = nullptr);
 
 private:
     QString m_connectionName;

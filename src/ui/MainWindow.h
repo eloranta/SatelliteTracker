@@ -9,6 +9,7 @@ class QLineEdit;
 class QComboBox;
 class QPushButton;
 class QLabel;
+class QTimer;
 
 namespace SatelliteTracker {
 
@@ -34,11 +35,16 @@ private:
     void reloadModelFromCache();
     void setBusy(bool busy);
 
+    // Refreshes now if the catalog has never been updated or is more than
+    // 24h stale, then arms the recurring 24h auto-refresh timer.
+    void startAutoRefreshSchedule();
+
     QString m_dbConnectionName;
     SatelliteRepository *m_repository = nullptr;
     CelestrakClient *m_celestrakClient = nullptr;
     SatelliteModel *m_satelliteModel = nullptr;
     QSortFilterProxyModel *m_proxyModel = nullptr;
+    QTimer *m_autoRefreshTimer = nullptr;
 
     QTableView *m_catalogTable = nullptr;
     QLineEdit *m_searchEdit = nullptr;

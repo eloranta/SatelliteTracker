@@ -12,6 +12,7 @@
 #include <QSortFilterProxyModel>
 #include <QTabWidget>
 #include <QTableView>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrent>
 
@@ -21,6 +22,10 @@
 #include "../data/SatelliteRepository.h"
 
 namespace SatelliteTracker {
+
+namespace {
+constexpr qint64 kAutoRefreshIntervalMs = qint64(24) * 60 * 60 * 1000;
+}
 
 MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     : QMainWindow(parent)
@@ -42,10 +47,10 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     setWindowTitle(QStringLiteral("SatelliteTracker"));
     resize(1100, 700);
 
-    // Show cached data immediately, then kick off a background refresh so
-    // the window never opens empty even before the network reply lands.
+    // Show cached data immediately, then refresh only if the cache is
+    // missing or stale; either way, arm the 24h auto-refresh timer.
     reloadModelFromCache();
-    onRefreshClicked();
+    startAutoRefreshSchedule();
 }
 
 QWidget *MainWindow::buildPassGridTabPlaceholder()
@@ -144,17 +149,32 @@ void MainWindow::reloadModelFromCache()
     m_satelliteModel->setSatellites(cached);
     m_rowCountLabel->setText(QStringLiteral("%1 satellites").arg(cached.size()));
 
-    if (!cached.isEmpty()) {
-        QDateTime newest;
-        for (const Satellite &s : cached) {
-            if (!newest.isValid() || s.lastUpdatedUtc > newest) newest = s.lastUpdatedUtc;
-        }
-        if (newest.isValid()) {
-            m_lastUpdatedLabel->setText(
-                QStringLiteral("Cache last updated: %1 UTC")
-                    .arg(newest.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))));
-        }
+    const QDateTime lastUpdated = m_repository->getLastCatalogUpdateUtc();
+    if (lastUpdated.isValid()) {
+        m_lastUpdatedLabel->setText(
+            QStringLiteral("Cache last updated: %1 UTC")
+                .arg(lastUpdated.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))));
     }
+}
+
+void MainWindow::startAutoRefreshSchedule()
+{
+    const QDateTime lastUpdated = m_repository->getLastCatalogUpdateUtc();
+    const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+    const bool isStale = !lastUpdated.isValid() || lastUpdated.secsTo(nowUtc) >= 24 * 60 * 60;
+
+    if (isStale) {
+        onRefreshClicked();
+    }
+
+    // Recurring timer catches the case where the app is left running for
+    // more than 24h straight; it never fires sooner than 24h after launch,
+    // and the startup check above already covers the "app was closed and
+    // reopened after >24h" case.
+    m_autoRefreshTimer = new QTimer(this);
+    m_autoRefreshTimer->setInterval(kAutoRefreshIntervalMs);
+    connect(m_autoRefreshTimer, &QTimer::timeout, this, &MainWindow::onRefreshClicked);
+    m_autoRefreshTimer->start();
 }
 
 void MainWindow::setBusy(bool busy)
@@ -193,6 +213,8 @@ void MainWindow::onFetchSucceeded(const QString &group, const QByteArray &rawTle
                                                   "local cache:\n%1").arg(dbError));
             return;
         }
+
+        m_repository->setLastCatalogUpdateUtc(QDateTime::currentDateTimeUtc());
 
         reloadModelFromCache();
         setBusy(false);

@@ -58,6 +58,21 @@ bool Database::applySchema(QSqlDatabase &db, QString *errorOut)
         return false;
     }
 
+    // Single-row-per-key store for catalog-level facts that don't belong to
+    // any one satellite, e.g. when the catalog as a whole was last refreshed
+    // from Celestrak (as opposed to satellites.last_updated_utc, which is
+    // per-row).
+    const bool metaOk = q.exec(QStringLiteral(
+        "CREATE TABLE IF NOT EXISTS catalog_metadata ("
+        "  key TEXT PRIMARY KEY,"
+        "  value TEXT"
+        ")"));
+
+    if (!metaOk) {
+        if (errorOut) *errorOut = q.lastError().text();
+        return false;
+    }
+
     return true;
 }
 
