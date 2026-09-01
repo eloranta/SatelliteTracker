@@ -38,6 +38,11 @@ public:
 
     int noradId() const { return m_satellite.noradId; }
 
+    // For PassGridWidget's chronological ordering: the current pass's AOS
+    // (or, if there's no upcoming pass yet, an arbitrarily-far-future value
+    // so such cards sort last).
+    QDateTime aosSortKey() const;
+
     // TLE/name may change after a catalog refresh; reloads the propagator
     // only if the TLE lines actually changed.
     void updateSatellite(const Satellite &satellite);

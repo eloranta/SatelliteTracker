@@ -83,12 +83,21 @@ void PassGridWidget::applyPassResults(const QHash<int, PassResult> &resultsByNor
             cardIt.value()->setPassResult(it.value());
         }
     }
+    // AOS times just changed, so the chronological order may have too.
+    reflow();
 }
 
 void PassGridWidget::reflow()
 {
+    // Chronological by AOS (soonest first), left to right then top to
+    // bottom; NORAD ID only breaks ties for a stable, deterministic order.
     QList<int> noradIds = m_cardsByNoradId.keys();
-    std::sort(noradIds.begin(), noradIds.end());
+    std::sort(noradIds.begin(), noradIds.end(), [this](int a, int b) {
+        const QDateTime aosA = m_cardsByNoradId.value(a)->aosSortKey();
+        const QDateTime aosB = m_cardsByNoradId.value(b)->aosSortKey();
+        if (aosA != aosB) return aosA < aosB;
+        return a < b;
+    });
 
     // Cards past their LOS hide themselves (see PassCard::tick) and are
     // excluded here -- removeWidget so a hidden card doesn't keep reserving

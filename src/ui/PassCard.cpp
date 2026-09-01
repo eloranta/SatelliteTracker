@@ -8,6 +8,7 @@
 #include <QLineSeries>
 #include <QMouseEvent>
 #include <QScatterSeries>
+#include <QTimeZone>
 #include <QValueAxis>
 #include <QVBoxLayout>
 
@@ -121,6 +122,17 @@ void PassCard::updateSatellite(const Satellite &satellite)
 void PassCard::setObserverLocation(const ObserverLocation &location)
 {
     m_location = location;
+}
+
+QDateTime PassCard::aosSortKey() const
+{
+    if (m_lastPass.state == PassState::NoPassInWindow) {
+        return QDateTime(QDate(9999, 1, 1), QTime(0, 0), QTimeZone::UTC);
+    }
+    // CurrentlyInView's aosUtc is just "now" as of the last recompute (see
+    // PassResult's aosUtc comment) -- already-visible passes naturally sort
+    // near the front either way, so no special-casing needed here.
+    return m_lastPass.aosUtc;
 }
 
 void PassCard::setPassResult(const PassResult &pass)
