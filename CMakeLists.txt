@@ -9,6 +9,8 @@ set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network Sql Concurrent)
 
+add_subdirectory(third_party/sgp4)
+
 add_executable(SatelliteTracker
     src/main.cpp
     src/data/Satellite.h
@@ -33,6 +35,7 @@ target_link_libraries(SatelliteTracker PRIVATE
     Qt6::Network
     Qt6::Sql
     Qt6::Concurrent
+    sgp4
 )
 
 if(WIN32)
