@@ -16,11 +16,16 @@ public:
     explicit SatelliteRepository(const QString &connectionName);
 
     // Inserts or updates every satellite in `satellites` in a single
-    // transaction. Returns true on success.
-    bool upsertSatellites(const QVector<Satellite> &satellites, QString *errorOut = nullptr);
+    // transaction, tagging each row with `group` (the Celestrak group it was
+    // fetched as part of). Returns true on success.
+    bool upsertSatellites(const QVector<Satellite> &satellites, const QString &group,
+                           QString *errorOut = nullptr);
 
-    // Returns every cached satellite, ordered by name.
-    QVector<Satellite> getAllSatellites(QString *errorOut = nullptr) const;
+    // Returns cached satellites ordered by name. When `group` is non-empty,
+    // only satellites last fetched as part of that Celestrak group are
+    // returned; an empty `group` returns everything ever cached.
+    QVector<Satellite> getAllSatellites(const QString &group = QString(),
+                                         QString *errorOut = nullptr) const;
 
     // UTC timestamp of the last successful catalog refresh from Celestrak.
     // Returns an invalid QDateTime if the catalog has never been refreshed.

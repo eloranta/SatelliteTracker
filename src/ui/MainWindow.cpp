@@ -142,6 +142,7 @@ QWidget *MainWindow::buildCatalogTab()
         m_proxyModel->setFilterFixedString(text);
     });
     connect(m_refreshButton, &QPushButton::clicked, this, &MainWindow::onRefreshClicked);
+    connect(m_groupCombo, &QComboBox::currentIndexChanged, this, &MainWindow::reloadModelFromCache);
 
     return tab;
 }
@@ -149,7 +150,8 @@ QWidget *MainWindow::buildCatalogTab()
 void MainWindow::reloadModelFromCache()
 {
     QString error;
-    const QVector<Satellite> cached = m_repository->getAllSatellites(&error);
+    const QString group = m_groupCombo->currentData().toString();
+    const QVector<Satellite> cached = m_repository->getAllSatellites(group, &error);
     if (!error.isEmpty()) {
         m_statusLabel->setText(QStringLiteral("Cache read error: %1").arg(error));
         return;
@@ -204,18 +206,16 @@ void MainWindow::onRefreshClicked()
 
 void MainWindow::onFetchSucceeded(const QString &group, const QByteArray &rawTleText)
 {
-    Q_UNUSED(group);
-
     // Parsing a few thousand TLE records is cheap but not free — do it off
     // the UI thread so a large group (e.g. "active", ~8000 satellites)
     // never causes a visible stall.
     auto *watcher = new QFutureWatcher<QVector<Satellite>>(this);
-    connect(watcher, &QFutureWatcher<QVector<Satellite>>::finished, this, [this, watcher]() {
+    connect(watcher, &QFutureWatcher<QVector<Satellite>>::finished, this, [this, watcher, group]() {
         const QVector<Satellite> parsed = watcher->result();
         watcher->deleteLater();
 
         QString dbError;
-        if (!m_repository->upsertSatellites(parsed, &dbError)) {
+        if (!m_repository->upsertSatellites(parsed, group, &dbError)) {
             setBusy(false);
             m_statusLabel->setText(QStringLiteral("Cache write failed: %1").arg(dbError));
             QMessageBox::warning(this, QStringLiteral("SatelliteTracker"),

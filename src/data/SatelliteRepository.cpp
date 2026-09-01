@@ -11,7 +11,8 @@ SatelliteRepository::SatelliteRepository(const QString &connectionName)
 {
 }
 
-bool SatelliteRepository::upsertSatellites(const QVector<Satellite> &satellites, QString *errorOut)
+bool SatelliteRepository::upsertSatellites(const QVector<Satellite> &satellites, const QString &group,
+                                            QString *errorOut)
 {
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
@@ -28,11 +29,11 @@ bool SatelliteRepository::upsertSatellites(const QVector<Satellite> &satellites,
     q.prepare(QStringLiteral(
         "INSERT INTO satellites ("
         "  norad_id, name, intl_designator, tle_line1, tle_line2, epoch_utc,"
-        "  source, is_active, last_updated_utc, inclination_deg, eccentricity,"
+        "  source, sat_group, is_active, last_updated_utc, inclination_deg, eccentricity,"
         "  mean_motion, period_minutes, apogee_km, perigee_km"
         ") VALUES ("
         "  :norad_id, :name, :intl_designator, :tle_line1, :tle_line2, :epoch_utc,"
-        "  :source, "
+        "  :source, :sat_group, "
         "  COALESCE((SELECT is_active FROM satellites WHERE norad_id = :norad_id_lookup), 0),"
         "  :last_updated_utc, :inclination_deg, :eccentricity,"
         "  :mean_motion, :period_minutes, :apogee_km, :perigee_km"
@@ -41,6 +42,7 @@ bool SatelliteRepository::upsertSatellites(const QVector<Satellite> &satellites,
         "  name=excluded.name, intl_designator=excluded.intl_designator,"
         "  tle_line1=excluded.tle_line1, tle_line2=excluded.tle_line2,"
         "  epoch_utc=excluded.epoch_utc, source=excluded.source,"
+        "  sat_group=excluded.sat_group,"
         "  last_updated_utc=excluded.last_updated_utc,"
         "  inclination_deg=excluded.inclination_deg, eccentricity=excluded.eccentricity,"
         "  mean_motion=excluded.mean_motion, period_minutes=excluded.period_minutes,"
@@ -56,6 +58,7 @@ bool SatelliteRepository::upsertSatellites(const QVector<Satellite> &satellites,
         q.bindValue(QStringLiteral(":tle_line2"), s.tleLine2);
         q.bindValue(QStringLiteral(":epoch_utc"), s.epochUtc.toUTC().toString(Qt::ISODate));
         q.bindValue(QStringLiteral(":source"), s.source);
+        q.bindValue(QStringLiteral(":sat_group"), group);
         q.bindValue(QStringLiteral(":last_updated_utc"), s.lastUpdatedUtc.toUTC().toString(Qt::ISODate));
         q.bindValue(QStringLiteral(":inclination_deg"), s.inclinationDeg);
         q.bindValue(QStringLiteral(":eccentricity"), s.eccentricity);
@@ -80,7 +83,7 @@ bool SatelliteRepository::upsertSatellites(const QVector<Satellite> &satellites,
     return true;
 }
 
-QVector<Satellite> SatelliteRepository::getAllSatellites(QString *errorOut) const
+QVector<Satellite> SatelliteRepository::getAllSatellites(const QString &group, QString *errorOut) const
 {
     QVector<Satellite> result;
 
@@ -91,11 +94,21 @@ QVector<Satellite> SatelliteRepository::getAllSatellites(QString *errorOut) cons
     }
 
     QSqlQuery q(db);
-    const bool ok = q.exec(QStringLiteral(
+    QString sql = QStringLiteral(
         "SELECT norad_id, name, intl_designator, tle_line1, tle_line2, epoch_utc,"
         "       source, is_active, last_updated_utc, inclination_deg, eccentricity,"
         "       mean_motion, period_minutes, apogee_km, perigee_km"
-        " FROM satellites ORDER BY name COLLATE NOCASE ASC"));
+        " FROM satellites");
+    if (!group.isEmpty()) {
+        sql += QStringLiteral(" WHERE sat_group = :sat_group");
+    }
+    sql += QStringLiteral(" ORDER BY name COLLATE NOCASE ASC");
+
+    q.prepare(sql);
+    if (!group.isEmpty()) {
+        q.bindValue(QStringLiteral(":sat_group"), group);
+    }
+    const bool ok = q.exec();
 
     if (!ok) {
         if (errorOut) *errorOut = q.lastError().text();

@@ -58,6 +58,26 @@ bool Database::applySchema(QSqlDatabase &db, QString *errorOut)
         return false;
     }
 
+    // sat_group tags each row with the Celestrak group it was last fetched
+    // as part of (e.g. "amateur", "active"), so the catalog view can be
+    // scoped to one group instead of always showing everything ever cached.
+    // Added after the initial release, so existing installs need it added
+    // via ALTER TABLE rather than picking it up from CREATE TABLE IF NOT
+    // EXISTS above.
+    bool hasGroupColumn = false;
+    if (q.exec(QStringLiteral("PRAGMA table_info(satellites)"))) {
+        while (q.next()) {
+            if (q.value(QStringLiteral("name")).toString() == QLatin1String("sat_group")) {
+                hasGroupColumn = true;
+                break;
+            }
+        }
+    }
+    if (!hasGroupColumn && !q.exec(QStringLiteral("ALTER TABLE satellites ADD COLUMN sat_group TEXT"))) {
+        if (errorOut) *errorOut = q.lastError().text();
+        return false;
+    }
+
     // Single-row-per-key store for catalog-level facts that don't belong to
     // any one satellite, e.g. when the catalog as a whole was last refreshed
     // from Celestrak (as opposed to satellites.last_updated_utc, which is
