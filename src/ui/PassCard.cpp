@@ -122,11 +122,11 @@ void PassCard::updateHeaderLabel()
 
     QString aosText;
     if (m_lastPass.state == PassState::UpcomingPass || m_lastPass.state == PassState::CurrentlyInView) {
-        const QDate aosDate = m_lastPass.aosUtc.date();
-        const QString datePart = aosDate == QDateTime::currentDateTimeUtc().date()
+        const QDateTime aosLocal = m_lastPass.aosUtc.toLocalTime();
+        const QString datePart = aosLocal.date() == QDate::currentDate()
             ? QStringLiteral("Today")
-            : aosDate.toString(QStringLiteral("yyyy-MM-dd"));
-        aosText = datePart + QLatin1Char(' ') + m_lastPass.aosUtc.toString(QStringLiteral("HH:mm:ss"));
+            : aosLocal.date().toString(QStringLiteral("yyyy-MM-dd"));
+        aosText = datePart + QLatin1Char(' ') + aosLocal.toString(QStringLiteral("HH:mm:ss"));
     }
 
     m_headerLabel->setText(aosText.isEmpty() ? name : name + QLatin1Char(' ') + aosText);
