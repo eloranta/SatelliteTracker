@@ -14,11 +14,18 @@ Implements Milestones 1–3 from `SatelliteTracker.md`:
   Location…**
 - A **Name** column showing the familiar short designator (e.g. `AO-7`, `ISS`) instead of
   the full Celestrak name; the full name is still in the model and searchable, just hidden.
-  A **Mode** column tags known satellites FM/Linear (a small static lookup, blank if unknown)
-- Tab 1 "Pass Grid": a live card per active satellite — an elevation-vs-time chart (Qt
-  Charts) rebuilt every ~30s, a "now" marker + status chip (`Idle`/`Rising`/`In View`/
-  `Setting`/`No upcoming pass`) updated every 1s, and an AOS/TCA/LOS/max-elevation summary
-  line. Double-click a card for a next-5-passes table
+  A **Mode** column tags known satellites FM/Linear (a small static lookup, blank if unknown).
+  Catalog table sorts by Name by default (click any header to resort)
+- Tab 1 "Pass Grid": always tries to fill 12 cards, pooling every pass starting within the
+  next 6h (including one already in progress) across the whole active watchlist and showing
+  the 12 soonest — a satellite with several near-term passes can occupy multiple slots, so
+  it's not a fixed one-card-per-satellite grid. Each card: an elevation-vs-time chart (Qt
+  Charts) whose area fill is red before AOS and green from AOS onward, a dashed vertical
+  "now" cursor between AOS and LOS, a "now" marker + status chip
+  (`Idle`/`Rising`/`In View`/`Setting`/`No upcoming pass`) updated every 1s, a header showing
+  the satellite name + AOS in local time (`Today HH:mm:ss`), and an AOS/TCA/LOS/max-elevation
+  summary line. A card hides itself once its own LOS passes; the next ~30s recompute cycle
+  replaces the whole set. Double-click a card for that satellite's next-5-passes table
 
 Not yet implemented (later milestones per the spec): alerts (M4), pass/app logging (M5),
 Space-Track auth (M6), full Settings dialog + installer (M7 — M2 ships only a minimal
@@ -79,12 +86,13 @@ cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/m
 
 ### Tests
 
-`tests/orbit_tests.cpp` validates the Maidenhead grid-locator conversion and the pass
-finder's AOS/TCA/LOS invariants against real reference data (a real SGP4 verification TLE
-and a well-known ham radio grid square) — no test-framework dependency, just asserts and
-an exit code, wired into CTest. Note: M3's additions to `PassFinder` (the elevation curve
-and `findUpcomingPasses`) aren't covered by dedicated assertions yet, only exercised
-indirectly through the UI.
+`tests/orbit_tests.cpp` validates the Maidenhead grid-locator conversion, the pass finder's
+AOS/TCA/LOS invariants against real reference data (a real SGP4 verification TLE and a
+well-known ham radio grid square), and the `CurrentlyInView` backward-AOS-search fix (a
+search starting from a pass's TCA correctly recovers the same true AOS/LOS as the original
+upcoming-pass search) — no test-framework dependency, just asserts and an exit code, wired
+into CTest. Note: `findUpcomingPasses`/`findPassesInWindow` and the chart's curve sampling
+aren't covered by dedicated assertions yet, only exercised indirectly through the UI.
 
 ```bash
 cmake --build build --target orbit_tests
@@ -112,7 +120,10 @@ additive, not destructive, and the catalog view is scoped to whichever group is 
 To see **Next AOS** populate (Tab 2) and cards appear in **Tab 1**, set your station's
 location once via **Settings → Observer Location…** (a Maidenhead grid locator, e.g.
 `KP20`, plus an optional altitude), then check a satellite's **Active** box in the catalog
-— its pass card appears in Tab 1 and its next pass is computed within one 30s tick.
+— Tab 1 recomputes within one 30s tick. Whether it actually gets a card depends on whether
+it has a pass starting in the next 6h: with few satellites active, one with several
+near-term passes can fill most of the grid on its own; with many active, the grid just
+shows whichever 12 passes (across everyone) are soonest.
 
 ## Note on toolchains
 

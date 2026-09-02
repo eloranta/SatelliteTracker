@@ -40,19 +40,38 @@ SatelliteTracker downloads orbital elements (TLEs) for a user-selected set of sa
 - Cards re-flow automatically as satellites are checked/unchecked in Tab 2.
 - Double-clicking a card opens a detail dialog with a longer-range table of the satellite's next N passes.
 
-**As built (M3):** AOS/TCA/LOS/max-elevation "markers ... annotated with
-time" are rendered as a compact text line under the chart (e.g. `AOS 03:14 ·
-TCA 03:19 (62° az 210°) · LOS 03:24`) rather than as in-chart annotations —
-same information, simpler and more reliably legible than custom
-`QGraphicsItem` label placement. The status chip mapping: `No upcoming pass`
-= `PassResult.state == NoPassInWindow`; `Idle` = below horizon, AOS >5 min
-away; `Rising` = below horizon, AOS within 5 min; `In View` = above horizon,
-at/before TCA (ascending); `Setting` = above horizon, after TCA (descending).
-Grid column count is auto-fit only (viewport width ÷ a fixed card min-width)
-— the "configurable in Settings" part is deferred to M7, since only the
-minimal M2 Observer Location dialog exists so far, not the full Settings
-dialog. The double-click detail dialog shows the next 5 passes (not
-configurable yet), computed via `PassFinder::findUpcomingPasses`.
+**As built (M3, refined post-ship):** AOS/TCA/LOS/max-elevation "markers ...
+annotated with time" are rendered as a compact text line under the chart
+(e.g. `AOS 03:14 · TCA 03:19 (62° az 210°) · LOS 03:24`) rather than as
+in-chart annotations — same information, simpler and more reliably legible
+than custom `QGraphicsItem` label placement. The status chip mapping:
+`No upcoming pass` = `PassResult.state == NoPassInWindow`; `Idle` = below
+horizon, AOS >5 min away; `Rising` = below horizon, AOS within 5 min;
+`In View` = above horizon, at/before TCA (ascending); `Setting` = above
+horizon, after TCA (descending). Grid column count is fixed at 4 (not
+auto-fit or Settings-configurable — deferred to M7, since only the minimal
+M2 Observer Location dialog exists so far, not the full Settings dialog).
+The card header shows the satellite's short name plus its AOS in **local**
+time (`Today HH:mm:ss`, or `yyyy-MM-dd HH:mm:ss` for another day) instead of
+NORAD ID; the chart's area fill is red before AOS and green from AOS onward,
+with a dashed vertical "now" cursor drawn only between AOS and LOS. The
+double-click detail dialog shows the next 5 passes (not configurable yet),
+computed via `PassFinder::findUpcomingPasses`.
+
+**Grid population, revised from "one card per active satellite":** rather
+than a fixed one-card-per-satellite quota, the grid pools every pass
+starting within the next 6h (including one already in progress) across the
+*entire* active watchlist, sorts that pool chronologically by AOS, and shows
+cards for only the soonest 12. A satellite with several near-term passes can
+occupy multiple slots; one with none that soon gets none that cycle — cards
+re-flow left-to-right, top-to-bottom in that same AOS order (superseding the
+"one card per active satellite" line above and the original "cards re-flow
+as satellites are checked/unchecked" framing, since the trigger is now "the
+pool changed," not just membership). An earlier per-satellite even-split
+allocation was tried and abandoned — it could starve a satellite of a
+genuinely-soon pass if its fixed quota was already spent on an earlier one.
+Once its own LOS passes, a card hides itself; a full recompute cycle (30s)
+replaces the whole set with a fresh pool-and-sort pass.
 
 ### Tab 2 — Satellite Catalog
 - `QTableView` backed by a `QAbstractTableModel`, one row per satellite from the loaded TLE set.
@@ -267,11 +286,24 @@ and `ui/PassDetailDialog.*` now exist as planned. One addition not in the
 original target layout: `core/SatelliteNaming.*`, a small shared utility
 (short-designator extraction + the FM/Linear mode lookup) pulled out of
 `SatelliteModel.cpp` once `PassCard`'s header needed the same logic, rather
-than duplicating it. **Known gap:** `tests/orbit_tests.cpp` wasn't extended
-to cover the M3-added `PassResult::curve` sampling or
-`findUpcomingPasses()` — both are exercised indirectly (curve data flows
-through `PassCard`'s chart, verified by a manual smoke test) but have no
-dedicated assertions yet.
+than duplicating it.
+
+`PassFinder.*` grew two more entry points post-ship: `findUpcomingPasses`
+(bounded by a pass *count*, used by `PassDetailDialog`) and
+`findPassesInWindow` (bounded by wall-clock time, used by
+`PassGridWidget`'s pool-and-sort grid population — see §2). `findNextPass`
+itself also grew a capability: when a satellite is already `CurrentlyInView`
+at `fromUtc`, it now searches *backward* (bounded to 6h) for the true AOS
+instead of reporting `fromUtc` as a stand-in — SGP4 propagates to past
+instants as validly as future ones, so there was no reason to settle for an
+approximation there.
+
+**Known gap:** `tests/orbit_tests.cpp` covers `findNextPass`'s core
+invariants and the `CurrentlyInView` backward-AOS-search fix specifically,
+but `findUpcomingPasses`/`findPassesInWindow` and the chart's curve sampling
+have no dedicated assertions yet — exercised indirectly (curve data flows
+through `PassCard`'s chart, verified by manual smoke tests) but not covered
+by `ctest`.
 
 ### 7.2 Key libraries
 - **Qt 6 Widgets + Qt Charts** — UI and elevation plots.
@@ -286,15 +318,23 @@ dedicated assertions yet.
 - Pass prediction for all active satellites runs on a periodic timer (default every 30s) on a worker thread; each `PassCard` is updated via signal/slot with the freshly computed pass window.
 - Alert evaluation happens right after each propagation pass, also off the UI thread; only notification dispatch touches the UI/tray (queued to main thread).
 
-**As built (M3):** the 30s recompute is `ActiveSatelliteTracker`'s existing
-`QtConcurrent::run` + `QFutureWatcher` job (added in M2), whose
-`passesUpdated` signal now also reaches `PassGridWidget`/`PassCard` — no
-second worker was introduced. The chart's live "now" marker and status chip
-tick every 1s on the UI thread directly (each `PassCard` owns its own
-`Sgp4OrbitPropagator`, reloaded only when its TLE changes): a single
-propagation per active card per second is cheap enough (well within the §8
-NFR's 50-satellite target) that hopping to a worker thread for it wasn't
-worth the complexity.
+**As built (M3, corrected post-ship):** the 30s recompute is *not* shared
+between Tab 2 and Tab 1 after all. `ActiveSatelliteTracker` (added in M2)
+still computes exactly one (soonest) pass per active satellite every 30s for
+Tab 2's Next AOS column, unchanged. `PassGridWidget` owns a **second,
+independent** 30s `QtConcurrent::run` + `QFutureWatcher` cycle (same
+pattern, separate instance) that gathers each active satellite's passes in
+the next 6h (`findPassesInWindow`, see §7.1) and rebuilds its whole
+`PassCard` set from scratch each cycle — the two trackers don't talk to each
+other. This split exists because "several passes per satellite within a
+window" is a grid-filling concern specific to Tab 1; Tab 2 never needed more
+than the single soonest pass, so burdening `ActiveSatelliteTracker` with the
+heavier computation would have been wasted work on every Tab 2-only cycle.
+The chart's live "now" marker and status chip still tick every 1s on the UI
+thread directly (each `PassCard` owns its own `Sgp4OrbitPropagator`, loaded
+once at construction): a single propagation per visible card per second is
+cheap enough (well within the §8 NFR's 50-satellite target) that hopping to
+a worker thread for it wasn't worth the complexity.
 
 ---
 
@@ -337,7 +377,7 @@ worth the complexity.
 |---|---|---|
 | M1 | TLE fetch (Celestrak first) + parsing + SQLite cache; Tab 2 catalog table (no checkboxes yet) | **Done** — see `README.md` |
 | M2 | SGP4 propagation + next-pass finder for a fixed observer; Tab 2 checkboxes wired to an "active satellites" list | **Done** — vendored SGP4 (§7.2), Maidenhead-locator observer settings (§6), Next AOS scoped to active satellites only (§2) |
-| M3 | Tab 1 pass grid with live elevation charts for active satellites | **Done** — Qt Charts linked, status-chip mapping + simplified annotations (§2), no dedicated tests for the new curve/multi-pass code yet (§7.1) |
+| M3 | Tab 1 pass grid with live elevation charts for active satellites | **Done**, refined post-ship — Qt Charts linked, status-chip mapping + simplified annotations, grid pools/sorts passes across the whole watchlist rather than one-per-satellite (§2), independent recompute cycle from Tab 2's tracker (§7.3), no dedicated tests for the curve/multi-pass code yet (§7.1) |
 | M4 | Alert engine (AOS/LOS/threshold) + tray notifications + Alerts dock | Not started |
 | M5 | Pass log + app event log + Log dock + CSV export | Not started |
 | M6 | Space-Track integration (credential storage, auth, rate-limited client) | Not started |
@@ -349,5 +389,5 @@ worth the complexity.
 
 - ~~Observer location: assumed fixed and set once in Settings — confirm no need for "current GPS location" auto-detection.~~ **Resolved in M2:** no GPS auto-detection; fixed, set once via `ObserverLocationDialog` (Settings → Observer Location…). Entered as a Maidenhead grid locator rather than raw lat/lon (ham-radio-friendly and less error-prone to type than decimal coordinates), plus an altitude in meters.
 - Space-Track query scope: assumed on-demand per-satellite queries against the GP class; confirm if a full bulk catalog download (like Celestrak) is preferred instead to reduce request count.
-- ~~Chart lookahead: assumed each Tab 1 card shows only the *next* pass; confirm whether a secondary "next 3 passes" mini-list per card is wanted in v1 or can wait.~~ **Resolved in M3:** the card itself still shows only the next pass, as assumed; the "several upcoming passes" need is instead met by the double-click detail dialog (next 5 passes), keeping the card uncluttered.
+- ~~Chart lookahead: assumed each Tab 1 card shows only the *next* pass; confirm whether a secondary "next 3 passes" mini-list per card is wanted in v1 or can wait.~~ **Resolved in M3, revised post-ship:** each card still shows exactly one pass (no in-card mini-list), and the double-click detail dialog still covers "several passes" for one satellite (next 5). But the original assumption that a card only ever shows *the* next pass no longer holds at the grid level — a satellite with multiple near-term passes can now occupy several of the grid's 12 slots simultaneously (see §2's grid-population note), so "next pass" became "one of several possible upcoming passes, per card."
 - No map/globe in v1 — confirm this is acceptable, since it's a common expectation for "satellite tracker" apps and could be a fast-follow (v1.1) using the existing propagation core.
