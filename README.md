@@ -16,10 +16,11 @@ Implements Milestones 1–3 from `SatelliteTracker.md`:
   the full Celestrak name; the full name is still in the model and searchable, just hidden.
   A **Mode** column tags known satellites FM/Linear (a small static lookup, blank if unknown).
   Catalog table sorts by Name by default (click any header to resort)
-- Tab 1 "Pass Grid": always tries to fill 12 cards, pooling every pass starting within the
-  next 6h (including one already in progress) across the whole active watchlist and showing
-  the 12 soonest — a satellite with several near-term passes can occupy multiple slots, so
-  it's not a fixed one-card-per-satellite grid. Each card: an elevation-vs-time chart (Qt
+- Tab 1 "Pass Grid": always tries to fill 12 cards. Every active satellite contributes its
+  next 12 passes (including one already in progress) to a shared pool; the pool is sorted
+  chronologically by AOS and only the soonest 12 across the whole watchlist get cards — a
+  satellite with several near-term passes can occupy multiple slots, so it's not a fixed
+  one-card-per-satellite grid. Each card: an elevation-vs-time chart (Qt
   Charts) whose area fill is red before AOS and green from AOS onward, a dashed vertical
   "now" cursor between AOS and LOS, a "now" marker + status chip
   (`Idle`/`Rising`/`In View`/`Setting`/`No upcoming pass`) updated every 1s, a header showing
@@ -91,8 +92,8 @@ AOS/TCA/LOS invariants against real reference data (a real SGP4 verification TLE
 well-known ham radio grid square), and the `CurrentlyInView` backward-AOS-search fix (a
 search starting from a pass's TCA correctly recovers the same true AOS/LOS as the original
 upcoming-pass search) — no test-framework dependency, just asserts and an exit code, wired
-into CTest. Note: `findUpcomingPasses`/`findPassesInWindow` and the chart's curve sampling
-aren't covered by dedicated assertions yet, only exercised indirectly through the UI.
+into CTest. Note: `findUpcomingPasses` and the chart's curve sampling aren't covered by
+dedicated assertions yet, only exercised indirectly through the UI.
 
 ```bash
 cmake --build build --target orbit_tests
@@ -120,10 +121,10 @@ additive, not destructive, and the catalog view is scoped to whichever group is 
 To see **Next AOS** populate (Tab 2) and cards appear in **Tab 1**, set your station's
 location once via **Settings → Observer Location…** (a Maidenhead grid locator, e.g.
 `KP20`, plus an optional altitude), then check a satellite's **Active** box in the catalog
-— Tab 1 recomputes within one 30s tick. Whether it actually gets a card depends on whether
-it has a pass starting in the next 6h: with few satellites active, one with several
-near-term passes can fill most of the grid on its own; with many active, the grid just
-shows whichever 12 passes (across everyone) are soonest.
+— Tab 1 recomputes within one 30s tick. Whether it actually gets a card depends on where its
+next few passes fall relative to everyone else's: with few satellites active, one with
+several near-term passes can fill most of the grid on its own; with many active, the grid
+just shows whichever 12 passes (across everyone's next 12 each) are soonest.
 
 ## Note on toolchains
 

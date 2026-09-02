@@ -59,19 +59,23 @@ double-click detail dialog shows the next 5 passes (not configurable yet),
 computed via `PassFinder::findUpcomingPasses`.
 
 **Grid population, revised from "one card per active satellite":** rather
-than a fixed one-card-per-satellite quota, the grid pools every pass
-starting within the next 6h (including one already in progress) across the
-*entire* active watchlist, sorts that pool chronologically by AOS, and shows
-cards for only the soonest 12. A satellite with several near-term passes can
-occupy multiple slots; one with none that soon gets none that cycle — cards
-re-flow left-to-right, top-to-bottom in that same AOS order (superseding the
-"one card per active satellite" line above and the original "cards re-flow
-as satellites are checked/unchecked" framing, since the trigger is now "the
-pool changed," not just membership). An earlier per-satellite even-split
-allocation was tried and abandoned — it could starve a satellite of a
-genuinely-soon pass if its fixed quota was already spent on an earlier one.
-Once its own LOS passes, a card hides itself; a full recompute cycle (30s)
-replaces the whole set with a fresh pool-and-sort pass.
+than a fixed one-card-per-satellite quota, every active satellite's next 12
+passes (including one already in progress) are pooled together across the
+*entire* active watchlist, the pool is sorted chronologically by AOS, and
+cards are shown for only the soonest 12. A satellite with several near-term
+passes can occupy multiple slots; one with none that soon gets none that
+cycle — cards re-flow left-to-right, top-to-bottom in that same AOS order
+(superseding the "one card per active satellite" line above and the original
+"cards re-flow as satellites are checked/unchecked" framing, since the
+trigger is now "the pool changed," not just membership). Each satellite
+contributes a full 12 candidates to the pool regardless of how soon they
+fall — an earlier design bounded per-satellite gathering by a 6h wall-clock
+window instead, but that could cut off a sparser satellite's actually-next
+pass if it happened to fall just past the window; an even earlier
+per-satellite even-split quota had the same starvation problem for a
+different reason (a fixed slot count, not a time cutoff). Once its own LOS
+passes, a card hides itself; a full recompute cycle (30s) replaces the whole
+set with a fresh pool-and-sort pass.
 
 ### Tab 2 — Satellite Catalog
 - `QTableView` backed by a `QAbstractTableModel`, one row per satellite from the loaded TLE set.
@@ -288,22 +292,24 @@ original target layout: `core/SatelliteNaming.*`, a small shared utility
 `SatelliteModel.cpp` once `PassCard`'s header needed the same logic, rather
 than duplicating it.
 
-`PassFinder.*` grew two more entry points post-ship: `findUpcomingPasses`
-(bounded by a pass *count*, used by `PassDetailDialog`) and
-`findPassesInWindow` (bounded by wall-clock time, used by
-`PassGridWidget`'s pool-and-sort grid population — see §2). `findNextPass`
-itself also grew a capability: when a satellite is already `CurrentlyInView`
-at `fromUtc`, it now searches *backward* (bounded to 6h) for the true AOS
-instead of reporting `fromUtc` as a stand-in — SGP4 propagates to past
-instants as validly as future ones, so there was no reason to settle for an
+`PassFinder.*` grew a second entry point post-ship: `findUpcomingPasses`
+(bounded by a pass *count*), used both by `PassDetailDialog`'s next-5-passes
+table and by `PassGridWidget`'s pool-and-sort grid population (count=12 per
+satellite — see §2). A `findPassesInWindow` (bounded by wall-clock time
+instead) was added and then removed once the grid switched to the count-
+bounded approach — it had no other caller. `findNextPass` itself also grew a
+capability: when a satellite is already `CurrentlyInView` at `fromUtc`, it
+now searches *backward* (bounded to 6h) for the true AOS instead of
+reporting `fromUtc` as a stand-in — SGP4 propagates to past instants as
+validly as future ones, so there was no reason to settle for an
 approximation there.
 
 **Known gap:** `tests/orbit_tests.cpp` covers `findNextPass`'s core
 invariants and the `CurrentlyInView` backward-AOS-search fix specifically,
-but `findUpcomingPasses`/`findPassesInWindow` and the chart's curve sampling
-have no dedicated assertions yet — exercised indirectly (curve data flows
-through `PassCard`'s chart, verified by manual smoke tests) but not covered
-by `ctest`.
+but `findUpcomingPasses` and the chart's curve sampling have no dedicated
+assertions yet — exercised indirectly (curve data flows through
+`PassCard`'s chart, verified by manual smoke tests) but not covered by
+`ctest`.
 
 ### 7.2 Key libraries
 - **Qt 6 Widgets + Qt Charts** — UI and elevation plots.
@@ -323,11 +329,11 @@ between Tab 2 and Tab 1 after all. `ActiveSatelliteTracker` (added in M2)
 still computes exactly one (soonest) pass per active satellite every 30s for
 Tab 2's Next AOS column, unchanged. `PassGridWidget` owns a **second,
 independent** 30s `QtConcurrent::run` + `QFutureWatcher` cycle (same
-pattern, separate instance) that gathers each active satellite's passes in
-the next 6h (`findPassesInWindow`, see §7.1) and rebuilds its whole
-`PassCard` set from scratch each cycle — the two trackers don't talk to each
-other. This split exists because "several passes per satellite within a
-window" is a grid-filling concern specific to Tab 1; Tab 2 never needed more
+pattern, separate instance) that gathers each active satellite's next 12
+passes (`findUpcomingPasses`, see §7.1) and rebuilds its whole `PassCard`
+set from scratch each cycle — the two trackers don't talk to each other.
+This split exists because "several upcoming passes per satellite" is a
+grid-filling concern specific to Tab 1; Tab 2 never needed more
 than the single soonest pass, so burdening `ActiveSatelliteTracker` with the
 heavier computation would have been wasted work on every Tab 2-only cycle.
 The chart's live "now" marker and status chip still tick every 1s on the UI
