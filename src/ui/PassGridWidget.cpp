@@ -17,40 +17,7 @@ constexpr int kColumns = 4;
 constexpr int kGridCapacity = 12;
 constexpr int kTickIntervalMs = 1000;
 constexpr int kRecomputeIntervalMs = 30 * 1000;
-constexpr int kFindUpcomingLookaheadHoursPerCall = 72;
-
-// Splits kGridCapacity slots across `satellites` as evenly as possible --
-// extra slots (the remainder) go to the satellites sorted first by NORAD
-// ID, for a stable, deterministic split. Once there are at least as many
-// satellites as capacity, everyone just gets 1 and the grid grows past
-// capacity (today's original behavior).
-QHash<int, int> passCountsFor(const QVector<Satellite> &satellites)
-{
-    QHash<int, int> counts;
-    const int n = satellites.size();
-    if (n == 0) {
-        return counts;
-    }
-
-    QVector<int> noradIds;
-    noradIds.reserve(n);
-    for (const Satellite &s : satellites) {
-        noradIds.append(s.noradId);
-    }
-    std::sort(noradIds.begin(), noradIds.end());
-
-    if (n >= kGridCapacity) {
-        for (int id : noradIds) counts.insert(id, 1);
-        return counts;
-    }
-
-    const int base = kGridCapacity / n;
-    const int remainder = kGridCapacity % n;
-    for (int i = 0; i < n; ++i) {
-        counts.insert(noradIds.at(i), base + (i < remainder ? 1 : 0));
-    }
-    return counts;
-}
+constexpr int kLookaheadHours = 6;
 }
 
 PassGridWidget::PassGridWidget(QWidget *parent)
@@ -113,9 +80,9 @@ void PassGridWidget::startRecompute()
     const QVector<Satellite> satellites = m_activeSatellites;
     const ObserverLocation location = m_location;
     const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+    const QDateTime windowEnd = nowUtc.addSecs(qint64(kLookaheadHours) * 3600);
 
-    QFuture<QHash<int, QVector<PassResult>>> future = QtConcurrent::run([satellites, location, nowUtc]() {
-        const QHash<int, int> counts = passCountsFor(satellites);
+    QFuture<QHash<int, QVector<PassResult>>> future = QtConcurrent::run([satellites, location, nowUtc, windowEnd]() {
         QHash<int, QVector<PassResult>> results;
         for (const Satellite &s : satellites) {
             Sgp4OrbitPropagator propagator;
@@ -123,10 +90,8 @@ void PassGridWidget::startRecompute()
                 continue; // unparsable TLE; leave absent
             }
             results.insert(s.noradId,
-                            findUpcomingPasses(propagator, nowUtc,
-                                               location.latitudeDeg, location.longitudeDeg, location.altitudeMeters,
-                                               counts.value(s.noradId, 1),
-                                               kFindUpcomingLookaheadHoursPerCall));
+                            findPassesInWindow(propagator, nowUtc, windowEnd,
+                                               location.latitudeDeg, location.longitudeDeg, location.altitudeMeters));
         }
         return results;
     });
@@ -149,15 +114,30 @@ void PassGridWidget::rebuildCards(const QHash<int, QVector<PassResult>> &passesB
     qDeleteAll(m_cards);
     m_cards.clear();
 
+    // Flatten every (satellite, pass) found across the whole active
+    // watchlist into one list, sort it chronologically by AOS, and only
+    // build cards for the soonest kGridCapacity -- so which satellites get
+    // shown is purely "what's happening soonest across everything active",
+    // not a per-satellite fair-share quota.
+    struct Entry { const Satellite *satellite; PassResult pass; };
+    QVector<Entry> entries;
     for (const Satellite &s : std::as_const(m_activeSatellites)) {
-        const QVector<PassResult> passes = passesByNoradId.value(s.noradId);
-        for (const PassResult &pass : passes) {
-            auto *card = new PassCard(s, m_content);
-            card->setObserverLocation(m_location);
-            card->setPassResult(pass);
-            connect(card, &PassCard::visibilityMaybeChanged, this, &PassGridWidget::reflow);
-            m_cards.append(card);
+        for (const PassResult &pass : passesByNoradId.value(s.noradId)) {
+            entries.append({&s, pass});
         }
+    }
+    std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
+        return a.pass.aosUtc < b.pass.aosUtc;
+    });
+
+    const int count = qMin(entries.size(), kGridCapacity);
+    for (int i = 0; i < count; ++i) {
+        const Entry &entry = entries.at(i);
+        auto *card = new PassCard(*entry.satellite, m_content);
+        card->setObserverLocation(m_location);
+        card->setPassResult(entry.pass);
+        connect(card, &PassCard::visibilityMaybeChanged, this, &PassGridWidget::reflow);
+        m_cards.append(card);
     }
 
     reflow();
