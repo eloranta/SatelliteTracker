@@ -53,14 +53,4 @@ QVector<PassResult> findUpcomingPasses(const IOrbitPropagator &propagator,
                                         int lookaheadHoursPerCall = 72,
                                         int coarseStepSeconds = 30);
 
-// Finds every pass (including one already CurrentlyInView at `fromUtc`)
-// whose AOS falls within [fromUtc, toUtc). Unlike findUpcomingPasses (bounded
-// by a pass count), this is bounded by wall-clock time -- for a Tab 1 grid
-// that wants "everything happening in the next few hours" regardless of how
-// many passes that turns out to be for a given satellite.
-QVector<PassResult> findPassesInWindow(const IOrbitPropagator &propagator,
-                                        const QDateTime &fromUtc, const QDateTime &toUtc,
-                                        double observerLatDeg, double observerLonDeg, double observerAltMeters,
-                                        int coarseStepSeconds = 30);
-
 } // namespace SatelliteTracker

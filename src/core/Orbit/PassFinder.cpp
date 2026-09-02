@@ -185,31 +185,4 @@ QVector<PassResult> findUpcomingPasses(const IOrbitPropagator &propagator,
     return results;
 }
 
-QVector<PassResult> findPassesInWindow(const IOrbitPropagator &propagator,
-                                        const QDateTime &fromUtc, const QDateTime &toUtc,
-                                        double observerLatDeg, double observerLonDeg, double observerAltMeters,
-                                        int coarseStepSeconds)
-{
-    QVector<PassResult> results;
-    QDateTime cursor = fromUtc;
-
-    while (cursor < toUtc) {
-        // Shrinks each iteration as the window is consumed, so a satellite
-        // with several passes in the window doesn't keep re-scanning far
-        // past toUtc looking for one more.
-        const int hoursLeft = int((cursor.secsTo(toUtc) + 3599) / 3600);
-        const PassResult pass = findNextPass(propagator, cursor, observerLatDeg, observerLonDeg,
-                                              observerAltMeters, qMax(1, hoursLeft), coarseStepSeconds);
-        if (pass.state == PassState::NoPassInWindow || pass.aosUtc >= toUtc) {
-            break;
-        }
-        results.append(pass);
-
-        const QDateTime end = pass.losUtc.isValid() ? pass.losUtc : pass.tcaUtc;
-        cursor = end.addSecs(60);
-    }
-
-    return results;
-}
-
 } // namespace SatelliteTracker

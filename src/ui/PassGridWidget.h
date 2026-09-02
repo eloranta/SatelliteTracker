@@ -18,12 +18,16 @@ class PassCard;
 
 // Tab 1: a QScrollArea of PassCards, per SatelliteTracker.md §2. Shows
 // "what's happening soonest across the whole active watchlist": for every
-// active satellite, finds every pass (including one already in progress)
-// starting within the next few hours, pools all of those (satellite, pass)
-// pairs together, sorts the pool chronologically by AOS, and builds cards
-// for only the soonest 12 -- so a satellite with several near-term passes
-// can occupy multiple grid slots while another with none that soon gets
-// none, rather than every active satellite getting a fixed quota of slots.
+// active satellite, finds its next kPassesPerSatellite passes (including one
+// already in progress, via findUpcomingPasses), pools all of those
+// (satellite, pass) pairs together across every active satellite, sorts the
+// pool chronologically by AOS, and builds cards for only the soonest 12 --
+// so a satellite with several near-term passes can occupy multiple grid
+// slots while another with none that soon gets none, rather than every
+// active satellite getting a fixed quota of grid slots. Each satellite still
+// contributes a full kPassesPerSatellite candidates to the pool regardless
+// of how soon they fall, so a satellite with sparse passes isn't cut off by
+// a wall-clock window that happened to fall between passes for it.
 //
 // Owns its own 30s off-thread recompute cycle (mirrors
 // ActiveSatelliteTracker's QTimer + QtConcurrent::run + QFutureWatcher
@@ -32,7 +36,7 @@ class PassCard;
 // Tab 2's Next AOS column only ever needs the single soonest pass, which
 // ActiveSatelliteTracker still provides unchanged. Each cycle fully rebuilds
 // the PassCard set from scratch rather than diffing, since
-// findPassesInWindow() already returns complete, standalone PassResults.
+// findUpcomingPasses() already returns complete, standalone PassResults.
 class PassGridWidget : public QScrollArea {
     Q_OBJECT
 public:

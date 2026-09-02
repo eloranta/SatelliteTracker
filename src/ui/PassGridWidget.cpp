@@ -17,7 +17,12 @@ constexpr int kColumns = 4;
 constexpr int kGridCapacity = 12;
 constexpr int kTickIntervalMs = 1000;
 constexpr int kRecomputeIntervalMs = 30 * 1000;
-constexpr int kLookaheadHours = 6;
+// Each active satellite contributes its own next kGridCapacity passes
+// (including one already in progress) as candidates to the pool -- a fixed
+// count per satellite, not a wall-clock window, so a satellite with sparse
+// passes still gets its fair set of candidates rather than being cut off by
+// a time cutoff that happened to fall between passes for it.
+constexpr int kPassesPerSatellite = kGridCapacity;
 }
 
 PassGridWidget::PassGridWidget(QWidget *parent)
@@ -80,9 +85,8 @@ void PassGridWidget::startRecompute()
     const QVector<Satellite> satellites = m_activeSatellites;
     const ObserverLocation location = m_location;
     const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
-    const QDateTime windowEnd = nowUtc.addSecs(qint64(kLookaheadHours) * 3600);
 
-    QFuture<QHash<int, QVector<PassResult>>> future = QtConcurrent::run([satellites, location, nowUtc, windowEnd]() {
+    QFuture<QHash<int, QVector<PassResult>>> future = QtConcurrent::run([satellites, location, nowUtc]() {
         QHash<int, QVector<PassResult>> results;
         for (const Satellite &s : satellites) {
             Sgp4OrbitPropagator propagator;
@@ -90,8 +94,9 @@ void PassGridWidget::startRecompute()
                 continue; // unparsable TLE; leave absent
             }
             results.insert(s.noradId,
-                            findPassesInWindow(propagator, nowUtc, windowEnd,
-                                               location.latitudeDeg, location.longitudeDeg, location.altitudeMeters));
+                            findUpcomingPasses(propagator, nowUtc,
+                                               location.latitudeDeg, location.longitudeDeg, location.altitudeMeters,
+                                               kPassesPerSatellite));
         }
         return results;
     });
