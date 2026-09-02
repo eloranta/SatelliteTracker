@@ -164,47 +164,29 @@ void PassCard::rebuildChartForPass()
         m_nowMarkerSeries->clear();
         m_nowCursorSeries->clear();
         m_summaryLabel->setText(QStringLiteral("No pass in the next 24h"));
-        m_axisEndAnchor = QDateTime();
-        m_accumulatedCurve.clear();
         updateHeaderLabel();
         return;
     }
 
-    // Detect "still the same pass, just refined" (LOS/TCA close to the one
-    // last seen) vs. "a new pass", to decide whether to merge the fresh
-    // curve onto what's already accumulated or start over (see
-    // m_accumulatedCurve's comment).
-    const QDateTime anchor = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.tcaUtc;
-    constexpr qint64 kSamePassToleranceSecs = 300;
-    const bool samePass = m_axisEndAnchor.isValid() && qAbs(m_axisEndAnchor.secsTo(anchor)) <= kSamePassToleranceSecs;
-
-    if (samePass && !m_accumulatedCurve.isEmpty()) {
-        const QDateTime newStart = m_lastPass.curve.first().utc;
-        while (!m_accumulatedCurve.isEmpty() && m_accumulatedCurve.last().utc >= newStart) {
-            m_accumulatedCurve.removeLast();
-        }
-        m_accumulatedCurve.append(m_lastPass.curve);
-    } else {
-        m_accumulatedCurve = m_lastPass.curve;
-    }
-
+    // Each card gets exactly one setPassResult() call for its whole
+    // lifetime (PassGridWidget rebuilds cards wholesale each recompute
+    // cycle rather than reusing them), and findNextPass()/findUpcomingPasses()
+    // already return a fully-correct, standalone curve (true AOS included,
+    // even for a CurrentlyInView pass) -- so no cross-call merging needed.
     QList<QPointF> points;
-    points.reserve(m_accumulatedCurve.size());
-    for (const ElevationPoint &p : m_accumulatedCurve) {
+    points.reserve(m_lastPass.curve.size());
+    for (const ElevationPoint &p : m_lastPass.curve) {
         points.append(QPointF(double(p.utc.toMSecsSinceEpoch()), p.elevationDeg));
     }
     m_curveSeries->replace(points);
     m_elevAxis->setRange(0.0, 90.0);
 
-    if (!samePass) {
-        // Use AOS/LOS directly rather than the curve's first/last sampled
-        // point -- the curve's adaptive step doesn't necessarily land
-        // exactly on LOS, which would otherwise clip the axis a few
-        // seconds short of the true end of the pass.
-        const QDateTime axisEnd = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.curve.last().utc;
-        m_timeAxis->setRange(m_accumulatedCurve.first().utc, axisEnd);
-        m_axisEndAnchor = anchor;
-    }
+    // Use AOS/LOS directly rather than the curve's first/last sampled point
+    // -- the curve's adaptive step doesn't necessarily land exactly on LOS,
+    // which would otherwise clip the axis a few seconds short of the true
+    // end of the pass.
+    const QDateTime axisEnd = m_lastPass.losUtc.isValid() ? m_lastPass.losUtc : m_lastPass.curve.last().utc;
+    m_timeAxis->setRange(m_lastPass.aosUtc, axisEnd);
 
     // Re-evaluated on the next tick(); default to red until then.
     m_areaIsGreen = false;

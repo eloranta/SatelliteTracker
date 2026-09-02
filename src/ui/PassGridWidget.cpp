@@ -4,16 +4,53 @@
 
 #include <QDateTime>
 #include <QGridLayout>
-#include <QSet>
 #include <QTimer>
+#include <QtConcurrent/QtConcurrent>
 
+#include "../core/Orbit/Sgp4OrbitPropagator.h"
 #include "PassCard.h"
 
 namespace SatelliteTracker {
 
 namespace {
 constexpr int kColumns = 4;
+constexpr int kGridCapacity = 12;
 constexpr int kTickIntervalMs = 1000;
+constexpr int kRecomputeIntervalMs = 30 * 1000;
+constexpr int kFindUpcomingLookaheadHoursPerCall = 72;
+
+// Splits kGridCapacity slots across `satellites` as evenly as possible --
+// extra slots (the remainder) go to the satellites sorted first by NORAD
+// ID, for a stable, deterministic split. Once there are at least as many
+// satellites as capacity, everyone just gets 1 and the grid grows past
+// capacity (today's original behavior).
+QHash<int, int> passCountsFor(const QVector<Satellite> &satellites)
+{
+    QHash<int, int> counts;
+    const int n = satellites.size();
+    if (n == 0) {
+        return counts;
+    }
+
+    QVector<int> noradIds;
+    noradIds.reserve(n);
+    for (const Satellite &s : satellites) {
+        noradIds.append(s.noradId);
+    }
+    std::sort(noradIds.begin(), noradIds.end());
+
+    if (n >= kGridCapacity) {
+        for (int id : noradIds) counts.insert(id, 1);
+        return counts;
+    }
+
+    const int base = kGridCapacity / n;
+    const int remainder = kGridCapacity % n;
+    for (int i = 0; i < n; ++i) {
+        counts.insert(noradIds.at(i), base + (i < remainder ? 1 : 0));
+    }
+    return counts;
+}
 }
 
 PassGridWidget::PassGridWidget(QWidget *parent)
@@ -29,61 +66,100 @@ PassGridWidget::PassGridWidget(QWidget *parent)
     m_tickTimer->setInterval(kTickIntervalMs);
     connect(m_tickTimer, &QTimer::timeout, this, [this]() {
         const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
-        for (PassCard *card : std::as_const(m_cardsByNoradId)) {
+        for (PassCard *card : std::as_const(m_cards)) {
             card->tick(nowUtc);
         }
     });
     m_tickTimer->start();
+
+    m_watcher = new QFutureWatcher<QHash<int, QVector<PassResult>>>(this);
+    connect(m_watcher, &QFutureWatcher<QHash<int, QVector<PassResult>>>::finished,
+            this, &PassGridWidget::onRecomputeFinished);
+
+    m_recomputeTimer = new QTimer(this);
+    m_recomputeTimer->setInterval(kRecomputeIntervalMs);
+    connect(m_recomputeTimer, &QTimer::timeout, this, &PassGridWidget::requestRecompute);
+    m_recomputeTimer->start();
 }
 
 void PassGridWidget::setActiveSatellites(const QVector<Satellite> &activeSatellites)
 {
-    QSet<int> stillActive;
-    stillActive.reserve(activeSatellites.size());
-
-    for (const Satellite &s : activeSatellites) {
-        stillActive.insert(s.noradId);
-
-        auto it = m_cardsByNoradId.find(s.noradId);
-        if (it == m_cardsByNoradId.end()) {
-            auto *card = new PassCard(s, m_content);
-            card->setObserverLocation(m_location);
-            connect(card, &PassCard::visibilityMaybeChanged, this, &PassGridWidget::reflow);
-            m_cardsByNoradId.insert(s.noradId, card);
-        } else {
-            it.value()->updateSatellite(s);
-        }
-    }
-
-    for (auto it = m_cardsByNoradId.begin(); it != m_cardsByNoradId.end();) {
-        if (!stillActive.contains(it.key())) {
-            it.value()->deleteLater();
-            it = m_cardsByNoradId.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    reflow();
+    m_activeSatellites = activeSatellites;
+    requestRecompute();
 }
 
 void PassGridWidget::setObserverLocation(const ObserverLocation &location)
 {
     m_location = location;
-    for (PassCard *card : std::as_const(m_cardsByNoradId)) {
-        card->setObserverLocation(location);
+    requestRecompute();
+}
+
+void PassGridWidget::requestRecompute()
+{
+    if (m_watcher->isRunning()) {
+        m_recomputePending = true;
+        return;
+    }
+    startRecompute();
+}
+
+void PassGridWidget::startRecompute()
+{
+    if (!m_location.isConfigured || m_activeSatellites.isEmpty()) {
+        rebuildCards({});
+        return;
+    }
+
+    const QVector<Satellite> satellites = m_activeSatellites;
+    const ObserverLocation location = m_location;
+    const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+
+    QFuture<QHash<int, QVector<PassResult>>> future = QtConcurrent::run([satellites, location, nowUtc]() {
+        const QHash<int, int> counts = passCountsFor(satellites);
+        QHash<int, QVector<PassResult>> results;
+        for (const Satellite &s : satellites) {
+            Sgp4OrbitPropagator propagator;
+            if (!propagator.loadTle(s.tleLine1, s.tleLine2)) {
+                continue; // unparsable TLE; leave absent
+            }
+            results.insert(s.noradId,
+                            findUpcomingPasses(propagator, nowUtc,
+                                               location.latitudeDeg, location.longitudeDeg, location.altitudeMeters,
+                                               counts.value(s.noradId, 1),
+                                               kFindUpcomingLookaheadHoursPerCall));
+        }
+        return results;
+    });
+
+    m_watcher->setFuture(future);
+}
+
+void PassGridWidget::onRecomputeFinished()
+{
+    rebuildCards(m_watcher->result());
+
+    if (m_recomputePending) {
+        m_recomputePending = false;
+        startRecompute();
     }
 }
 
-void PassGridWidget::applyPassResults(const QHash<int, PassResult> &resultsByNoradId)
+void PassGridWidget::rebuildCards(const QHash<int, QVector<PassResult>> &passesByNoradId)
 {
-    for (auto it = resultsByNoradId.constBegin(); it != resultsByNoradId.constEnd(); ++it) {
-        auto cardIt = m_cardsByNoradId.find(it.key());
-        if (cardIt != m_cardsByNoradId.end()) {
-            cardIt.value()->setPassResult(it.value());
+    qDeleteAll(m_cards);
+    m_cards.clear();
+
+    for (const Satellite &s : std::as_const(m_activeSatellites)) {
+        const QVector<PassResult> passes = passesByNoradId.value(s.noradId);
+        for (const PassResult &pass : passes) {
+            auto *card = new PassCard(s, m_content);
+            card->setObserverLocation(m_location);
+            card->setPassResult(pass);
+            connect(card, &PassCard::visibilityMaybeChanged, this, &PassGridWidget::reflow);
+            m_cards.append(card);
         }
     }
-    // AOS times just changed, so the chronological order may have too.
+
     reflow();
 }
 
@@ -91,20 +167,19 @@ void PassGridWidget::reflow()
 {
     // Chronological by AOS (soonest first), left to right then top to
     // bottom; NORAD ID only breaks ties for a stable, deterministic order.
-    QList<int> noradIds = m_cardsByNoradId.keys();
-    std::sort(noradIds.begin(), noradIds.end(), [this](int a, int b) {
-        const QDateTime aosA = m_cardsByNoradId.value(a)->aosSortKey();
-        const QDateTime aosB = m_cardsByNoradId.value(b)->aosSortKey();
+    QVector<PassCard *> ordered = m_cards;
+    std::sort(ordered.begin(), ordered.end(), [](PassCard *a, PassCard *b) {
+        const QDateTime aosA = a->aosSortKey();
+        const QDateTime aosB = b->aosSortKey();
         if (aosA != aosB) return aosA < aosB;
-        return a < b;
+        return a->noradId() < b->noradId();
     });
 
-    // Cards past their LOS hide themselves (see PassCard::tick) and are
+    // Cards past their own LOS hide themselves (see PassCard::tick) and are
     // excluded here -- removeWidget so a hidden card doesn't keep reserving
-    // its old grid cell -- until their next pass shows them again.
+    // its old grid cell -- until the next recompute cycle replaces them.
     int visibleIndex = 0;
-    for (int noradId : noradIds) {
-        PassCard *card = m_cardsByNoradId.value(noradId);
+    for (PassCard *card : std::as_const(ordered)) {
         if (card->isHidden()) {
             m_gridLayout->removeWidget(card);
             continue;

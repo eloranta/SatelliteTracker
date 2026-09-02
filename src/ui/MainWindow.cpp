@@ -68,8 +68,6 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     setCentralWidget(tabs);
 
     connect(m_satelliteModel, &SatelliteModel::activeChanged, this, &MainWindow::onActiveToggled);
-    connect(m_activeTracker, &ActiveSatelliteTracker::passesUpdated,
-            m_passGridWidget, &PassGridWidget::applyPassResults);
     m_passGridWidget->setObserverLocation(AppSettings::loadObserverLocation());
 
     setWindowTitle(QStringLiteral("SatelliteTracker"));

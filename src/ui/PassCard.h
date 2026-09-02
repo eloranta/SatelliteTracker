@@ -20,17 +20,19 @@ class QDateTimeAxis;
 
 namespace SatelliteTracker {
 
-// One Tab 1 pass-grid card for one active satellite: an elevation-vs-time
-// chart (updated ~every 30s when a fresh PassResult arrives) plus a live
-// "now" marker and status chip (updated every 1s via tick()). Owns its own
+// One Tab 1 pass-grid card for one specific pass of one satellite: an
+// elevation-vs-time chart (set once via setPassResult()) plus a live "now"
+// marker and status chip (updated every 1s via tick()). Owns its own
 // propagator so per-second updates don't need to go back through
-// ActiveSatelliteTracker's off-thread recompute cycle.
+// PassGridWidget's off-thread recompute cycle. PassGridWidget rebuilds its
+// whole card set each ~30s cycle rather than reusing cards, so a given
+// PassCard instance only ever receives one setPassResult() call.
 //
-// The area under the curve is red before AOS (not yet visible) and green
-// from AOS onward; once LOS passes the card hides itself (still alive,
-// still receiving updates -- just excluded from PassGridWidget's layout
-// until its next pass arrives) and emits visibilityMaybeChanged() so the
-// grid can reflow around it.
+// The area under the curve is red before AOS (not yet risen) and green from
+// AOS onward; once its own LOS passes the card hides itself (still alive,
+// but excluded from PassGridWidget's layout -- the next 30s rebuild
+// replaces it with fresh cards for the satellite's next passes) and emits
+// visibilityMaybeChanged() so the grid can reflow around it.
 class PassCard : public QFrame {
     Q_OBJECT
 public:
@@ -66,18 +68,6 @@ private:
     PassResult m_lastPass;
     std::unique_ptr<IOrbitPropagator> m_propagator;
     bool m_areaIsGreen = false;
-    // LOS (or TCA, if LOS unknown) the time axis range was last set from;
-    // used to tell "still the same pass, just refined" apart from "a new
-    // pass" so the axis doesn't jitter/re-set every ~30s recompute from
-    // sub-second bisection-precision differences between calls.
-    QDateTime m_axisEndAnchor;
-    // Defensive accumulation of curve points across setPassResult() calls
-    // for the *same* pass. PassFinder now finds the true AOS even when
-    // CurrentlyInView (searching backward from "now"), so each fresh curve
-    // should already span the full true-AOS..LOS range on its own -- this
-    // just guards against the plotted curve ever losing already-captured
-    // history if two calls' bisected AOS differ slightly.
-    QVector<ElevationPoint> m_accumulatedCurve;
 
     QLabel *m_headerLabel = nullptr;
     QLabel *m_statusChip = nullptr;
