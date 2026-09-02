@@ -37,6 +37,7 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
     headerFont.setBold(true);
     headerFont.setPointSize(headerFont.pointSize() - 1);
     m_headerLabel->setFont(headerFont);
+    m_headerLabel->setAlignment(Qt::AlignCenter);
     m_statusChip = new QLabel(this);
     QFont chipFont = m_statusChip->font();
     chipFont.setPointSize(qMax(7, chipFont.pointSize() - 2));
