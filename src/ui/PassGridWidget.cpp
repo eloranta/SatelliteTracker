@@ -142,6 +142,7 @@ void PassGridWidget::rebuildCards(const QHash<int, QVector<PassResult>> &passesB
         card->setObserverLocation(m_location);
         card->setPassResult(entry.pass);
         connect(card, &PassCard::visibilityMaybeChanged, this, &PassGridWidget::reflow);
+        connect(card, &PassCard::radarTabRequested, this, &PassGridWidget::radarTabRequested);
         m_cards.append(card);
     }
 

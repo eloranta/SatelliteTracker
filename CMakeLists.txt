@@ -44,8 +44,6 @@ add_executable(SatelliteTracker
     src/ui/ObserverLocationDialog.cpp
     src/ui/PassCard.h
     src/ui/PassCard.cpp
-    src/ui/PassDetailDialog.h
-    src/ui/PassDetailDialog.cpp
     src/ui/PassGridWidget.h
     src/ui/PassGridWidget.cpp
     src/ui/PassRadarTab.h

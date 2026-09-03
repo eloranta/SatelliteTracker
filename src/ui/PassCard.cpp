@@ -14,7 +14,6 @@
 
 #include "../core/Orbit/Sgp4OrbitPropagator.h"
 #include "../core/SatelliteNaming.h"
-#include "PassDetailDialog.h"
 
 namespace SatelliteTracker {
 
@@ -227,8 +226,9 @@ void PassCard::tick(const QDateTime &nowUtc)
 
 void PassCard::mouseDoubleClickEvent(QMouseEvent *event)
 {
-    PassDetailDialog dialog(m_satellite, m_location, this);
-    dialog.exec();
+    if (m_lastPass.state != PassState::NoPassInWindow) {
+        emit radarTabRequested(m_satellite, m_lastPass);
+    }
     QFrame::mouseDoubleClickEvent(event);
 }
 

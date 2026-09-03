@@ -45,6 +45,11 @@ public:
     void setActiveSatellites(const QVector<Satellite> &activeSatellites);
     void setObserverLocation(const ObserverLocation &location);
 
+signals:
+    // Forwarded from whichever PassCard was double-clicked, for MainWindow
+    // to open/focus that satellite's radar-plot tab.
+    void radarTabRequested(Satellite satellite, PassResult pass);
+
 private:
     void requestRecompute();
     void startRecompute();

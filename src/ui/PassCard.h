@@ -54,6 +54,7 @@ public:
 
 signals:
     void visibilityMaybeChanged();
+    void radarTabRequested(Satellite satellite, PassResult pass);
 
 protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
