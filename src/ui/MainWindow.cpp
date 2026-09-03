@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSortFilterProxyModel>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTableView>
 #include <QTimer>
@@ -22,11 +23,13 @@
 #include "../core/ActiveSatelliteTracker.h"
 #include "../core/AppSettings.h"
 #include "../core/CelestrakClient.h"
+#include "../core/SatelliteNaming.h"
 #include "../core/TleParser.h"
 #include "../data/SatelliteModel.h"
 #include "../data/SatelliteRepository.h"
 #include "ObserverLocationDialog.h"
 #include "PassGridWidget.h"
+#include "PassRadarTab.h"
 
 namespace SatelliteTracker {
 
@@ -62,13 +65,31 @@ MainWindow::MainWindow(const QString &dbConnectionName, QWidget *parent)
     settingsMenu->addAction(QStringLiteral("Observer Location…"),
                              this, &MainWindow::onObserverLocationTriggered);
 
-    auto *tabs = new QTabWidget(this);
-    tabs->addTab(buildPassGridTab(), QStringLiteral("Pass Grid"));
-    tabs->addTab(buildCatalogTab(), QStringLiteral("Satellite Catalog"));
-    setCentralWidget(tabs);
+    m_tabs = new QTabWidget(this);
+    m_tabs->addTab(buildPassGridTab(), QStringLiteral("Pass Grid"));
+    m_tabs->addTab(buildCatalogTab(), QStringLiteral("Satellite Catalog"));
+    setCentralWidget(m_tabs);
+
+    // Only satellite radar tabs (added later, via onRadarTabRequested) are
+    // closable -- these two fixed tabs never are.
+    m_tabs->setTabsClosable(true);
+    m_tabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
+    m_tabs->tabBar()->setTabButton(1, QTabBar::RightSide, nullptr);
+    connect(m_tabs, &QTabWidget::tabCloseRequested, this, &MainWindow::onTabCloseRequested);
 
     connect(m_satelliteModel, &SatelliteModel::activeChanged, this, &MainWindow::onActiveToggled);
+    connect(m_passGridWidget, &PassGridWidget::radarTabRequested, this, &MainWindow::onRadarTabRequested);
     m_passGridWidget->setObserverLocation(AppSettings::loadObserverLocation());
+
+    m_radarTickTimer = new QTimer(this);
+    m_radarTickTimer->setInterval(1000);
+    connect(m_radarTickTimer, &QTimer::timeout, this, [this]() {
+        const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+        for (PassRadarTab *tab : std::as_const(m_radarTabsByNoradId)) {
+            tab->tick(nowUtc);
+        }
+    });
+    m_radarTickTimer->start();
 
     setWindowTitle(QStringLiteral("SatelliteTracker"));
     resize(1100, 700);
@@ -321,6 +342,39 @@ void MainWindow::onObserverLocationTriggered()
     m_activeTracker->setObserverLocation(newLocation);
     m_activeTracker->requestRecompute();
     m_passGridWidget->setObserverLocation(newLocation);
+    for (PassRadarTab *tab : std::as_const(m_radarTabsByNoradId)) {
+        tab->setObserverLocation(newLocation);
+    }
+}
+
+void MainWindow::onRadarTabRequested(const Satellite &satellite, const PassResult &pass)
+{
+    auto it = m_radarTabsByNoradId.find(satellite.noradId);
+    if (it != m_radarTabsByNoradId.end()) {
+        it.value()->setPassResult(satellite, pass);
+        m_tabs->setCurrentWidget(it.value());
+        return;
+    }
+
+    auto *tab = new PassRadarTab(satellite, m_tabs);
+    tab->setObserverLocation(AppSettings::loadObserverLocation());
+    tab->setPassResult(satellite, pass);
+    m_tabs->addTab(tab, SatelliteNaming::shortName(satellite.name));
+    m_radarTabsByNoradId.insert(satellite.noradId, tab);
+    m_tabs->setCurrentWidget(tab);
+}
+
+void MainWindow::onTabCloseRequested(int index)
+{
+    QWidget *widget = m_tabs->widget(index);
+    for (auto it = m_radarTabsByNoradId.begin(); it != m_radarTabsByNoradId.end(); ++it) {
+        if (it.value() == widget) {
+            m_radarTabsByNoradId.erase(it);
+            break;
+        }
+    }
+    m_tabs->removeTab(index);
+    widget->deleteLater();
 }
 
 } // namespace SatelliteTracker

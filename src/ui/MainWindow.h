@@ -12,6 +12,7 @@ class QLineEdit;
 class QComboBox;
 class QPushButton;
 class QLabel;
+class QTabWidget;
 class QTimer;
 
 namespace SatelliteTracker {
@@ -19,8 +20,10 @@ namespace SatelliteTracker {
 class ActiveSatelliteTracker;
 class CelestrakClient;
 class PassGridWidget;
+class PassRadarTab;
 class SatelliteModel;
 class SatelliteRepository;
+struct Satellite;
 
 // Top-level window: a QTabWidget with Tab 1 (Pass Grid, M3) and Tab 2
 // (Satellite Catalog, M1/M2).
@@ -36,6 +39,8 @@ private slots:
     void onActiveToggled(int noradId, bool active);
     void onPassesUpdated(const QHash<int, PassResult> &resultsByNoradId);
     void onObserverLocationTriggered();
+    void onRadarTabRequested(const Satellite &satellite, const PassResult &pass);
+    void onTabCloseRequested(int index);
 
 private:
     QWidget *buildPassGridTab();
@@ -62,6 +67,10 @@ private:
     QSortFilterProxyModel *m_proxyModel = nullptr;
     QTimer *m_autoRefreshTimer = nullptr;
     QTimer *m_retryTimer = nullptr;
+
+    QTabWidget *m_tabs = nullptr;
+    QHash<int, PassRadarTab *> m_radarTabsByNoradId;
+    QTimer *m_radarTickTimer = nullptr;
 
     QTableView *m_catalogTable = nullptr;
     QLineEdit *m_searchEdit = nullptr;
