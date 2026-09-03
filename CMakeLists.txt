@@ -48,6 +48,8 @@ add_executable(SatelliteTracker
     src/ui/PassDetailDialog.cpp
     src/ui/PassGridWidget.h
     src/ui/PassGridWidget.cpp
+    src/ui/PassRadarTab.h
+    src/ui/PassRadarTab.cpp
 )
 
 target_include_directories(SatelliteTracker PRIVATE src)
