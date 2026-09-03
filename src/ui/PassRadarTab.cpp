@@ -5,6 +5,7 @@
 
 #include <QCategoryAxis>
 #include <QChartView>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineSeries>
 #include <QPen>
@@ -154,7 +155,19 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
 
     m_chartView = new QChartView(m_chart, this);
     m_chartView->setRenderHint(QPainter::Antialiasing);
-    layout->addWidget(m_chartView, 1);
+
+    m_azElLabel = new QLabel(this);
+    QFont azElFont = m_azElLabel->font();
+    azElFont.setPointSize(azElFont.pointSize() + 2);
+    m_azElLabel->setFont(azElFont);
+    m_azElLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_azElLabel->setTextFormat(Qt::PlainText);
+    m_azElLabel->setText(QStringLiteral("Az —\nEl —"));
+
+    auto *chartRow = new QHBoxLayout();
+    chartRow->addWidget(m_azElLabel, 0);
+    chartRow->addWidget(m_chartView, 1);
+    layout->addLayout(chartRow, 1);
 
     setPassResult(satellite, PassResult());
 }
@@ -203,6 +216,7 @@ void PassRadarTab::rebuildPlot()
     if (m_lastPass.state == PassState::NoPassInWindow || m_lastPass.curve.isEmpty()) {
         m_trackSeries->clear();
         m_nowMarkerSeries->clear();
+        m_azElLabel->setText(QStringLiteral("Az —\nEl —"));
         for (QLineSeries *arrow : std::as_const(m_arrowSeries))
             arrow->clear();
         return;
@@ -257,6 +271,7 @@ void PassRadarTab::tick(const QDateTime &nowUtc)
         || nowUtc < m_lastPass.aosUtc
         || (m_lastPass.losUtc.isValid() && nowUtc > m_lastPass.losUtc)) {
         m_nowMarkerSeries->clear();
+        m_azElLabel->setText(QStringLiteral("Az —\nEl —"));
         return;
     }
 
@@ -264,8 +279,12 @@ void PassRadarTab::tick(const QDateTime &nowUtc)
         nowUtc, m_location.latitudeDeg, m_location.longitudeDeg, m_location.altitudeMeters);
     if (look.valid && look.elevationDeg > 0.0) {
         m_nowMarkerSeries->replace({QPointF(look.azimuthDeg, elevationToRadius(look.elevationDeg))});
+        m_azElLabel->setText(
+            QStringLiteral("Az %1").arg(QString::number(look.azimuthDeg, 'f', 1)) + kDegreeSign
+            + QStringLiteral("\nEl %1").arg(QString::number(look.elevationDeg, 'f', 1)) + kDegreeSign);
     } else {
         m_nowMarkerSeries->clear();
+        m_azElLabel->setText(QStringLiteral("Az —\nEl —"));
     }
 }
 

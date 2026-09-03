@@ -61,6 +61,12 @@ namespace SatelliteTracker {
 // convention: 0 deg at top, clockwise), building the chevron there, then
 // converting back to (azimuth, radius) -- entirely in data space, so it
 // stays correct across window resizes without touching pixel coordinates.
+//
+// Live Az/El readout: m_azElLabel sits to the left of the chart (its own
+// column in the row layout, not overlaid on the plot), updated every tick()
+// alongside m_nowMarkerSeries -- same live look angle, just also spelled
+// out as text since reading exact degrees off the marker's position on the
+// plot isn't practical.
 class PassRadarTab : public QWidget {
     Q_OBJECT
 public:
@@ -82,6 +88,7 @@ private:
     std::unique_ptr<IOrbitPropagator> m_propagator;
 
     QLabel *m_headerLabel = nullptr;
+    QLabel *m_azElLabel = nullptr;
     QPolarChart *m_chart = nullptr;
     QChartView *m_chartView = nullptr;
     QCategoryAxis *m_angularAxis = nullptr;
