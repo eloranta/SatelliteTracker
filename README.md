@@ -1,6 +1,6 @@
-# SatelliteTracker — M1 + M2 + M3 Build (MinGW-w64 / MSYS2)
+# SatelliteTracker — M1 + M2 + M3 + M4 Build (MinGW-w64 / MSYS2)
 
-Implements Milestones 1–3 from `SatelliteTracker.md`:
+Implements Milestones 1–4 from `SatelliteTracker.md`:
 - Live TLE fetch from Celestrak (`GROUP`/`FORMAT=tle` endpoint), async, no auth
 - TLE parsing into `Satellite` records, with derived inclination/period/apogee/perigee
 - SQLite cache (upsert-by-NORAD-ID) under `%LOCALAPPDATA%/SatelliteTracker/data.db`, tagged
@@ -26,11 +26,21 @@ Implements Milestones 1–3 from `SatelliteTracker.md`:
   (`Idle`/`Rising`/`In View`/`Setting`/`No upcoming pass`) updated every 1s, a header showing
   the satellite name + AOS in local time (`Today HH:mm:ss`), and an AOS/TCA/LOS/max-elevation
   summary line. A card hides itself once its own LOS passes; the next ~30s recompute cycle
-  replaces the whole set. Double-click a card for that satellite's next-5-passes table
+  replaces the whole set. Double-click a card to open (or focus) a per-satellite tab with a
+  polar azimuth/elevation "radar" plot of that pass (see below) — replaces the old next-5
+  -passes dialog entirely
+- Per-satellite radar-plot tab (double-click a pass card): a `QPolarChart` az/el plot, closable,
+  one tab per satellite, updates in place if you double-click a different pass for a satellite
+  that already has a tab open. Azimuth is the angular axis (0°=N, clockwise, Qt's polar default).
+  Elevation is the radial axis, 0° (horizon) at the rim and 90° (zenith) at the center — note
+  `QAbstractAxis::setReverse()` does **not** do this for a polar radial axis in Qt Charts (a
+  no-op, confirmed from source); the radial axis is a `QCategoryAxis` plotted over
+  `90 - elevationDeg` with explicit "90°"/"45°"/"0°" labels instead. A live marker ticks every 1s
+  for whichever tabs are open, driven centrally from `MainWindow`
 
-Not yet implemented (later milestones per the spec): per-satellite radar-plot tab on
-double-click (M4), alerts (M5), pass/app logging (M6), Space-Track auth (M7), full Settings
-dialog + installer (M8 — M2 ships only a minimal Observer Location dialog, a preview of it).
+Not yet implemented (later milestones per the spec): alerts (M5), pass/app logging (M6),
+Space-Track auth (M7), full Settings dialog + installer (M8 — M2 ships only a minimal Observer
+Location dialog, a preview of it).
 
 ## Prerequisites (MSYS2 MinGW64)
 
@@ -150,5 +160,5 @@ SatelliteTracker/
 │  │                  # ObserverLocation, ActiveSatelliteTracker, and Orbit/ (IOrbitPropagator,
 │  │                  # Sgp4OrbitPropagator, PassFinder)
 │  └─ ui/              # MainWindow (tabs, catalog table, toolbar/menu wiring),
-│                       # ObserverLocationDialog, PassGridWidget, PassCard, PassDetailDialog
+│                       # ObserverLocationDialog, PassGridWidget, PassCard, PassRadarTab
 ```

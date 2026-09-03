@@ -40,6 +40,12 @@ SatelliteTracker downloads orbital elements (TLEs) for a user-selected set of sa
 - Cards re-flow automatically as satellites are checked/unchecked in Tab 2.
 - Double-clicking a card opens a detail dialog with a longer-range table of the satellite's next N passes.
 
+**As built (M4):** double-click no longer opens a dialog. It opens (or, if
+already open, focuses) a closable tab named after the satellite's short
+name, showing a polar azimuth/elevation "radar" plot of that specific pass
+(§2.1) — `PassDetailDialog`'s next-N-passes table was removed entirely
+rather than kept alongside it.
+
 **As built (M3, refined post-ship):** AOS/TCA/LOS/max-elevation "markers ...
 annotated with time" are rendered as a compact text line under the chart
 (e.g. `AOS 03:14 · TCA 03:19 (62° az 210°) · LOS 03:24`) rather than as
@@ -76,6 +82,46 @@ per-satellite even-split quota had the same starvation problem for a
 different reason (a fixed slot count, not a time cutoff). Once its own LOS
 passes, a card hides itself; a full recompute cycle (30s) replaces the whole
 set with a fresh pool-and-sort pass.
+
+### 2.1 Per-Satellite Radar Plot Tab (M4, as built)
+
+Double-clicking a `PassCard` opens (or focuses) a `PassRadarTab`, a
+dynamically-added, closable tab (`QTabWidget::setTabsClosable`, close
+buttons suppressed on the two fixed tabs) showing a `QPolarChart`
+azimuth/elevation plot of that one pass — the sky-path view used for aiming
+a directional antenna. One tab per satellite (keyed by NORAD ID in
+`MainWindow`); double-clicking a different upcoming pass for a satellite
+that already has a tab open updates and refocuses that tab rather than
+opening a duplicate. Long-lived and re-updatable (`setPassResult()` can be
+called again), unlike `PassCard`, which is single-shot.
+
+- **Angular axis:** azimuth, 0–360°, `QValueAxis`, Qt Charts' polar-chart
+  default (0° at 12 o'clock, increasing clockwise) already matches compass
+  bearing convention — no rotation needed.
+- **Radial axis:** elevation, wanted with 0° (horizon) at the outer rim and
+  90° (zenith) at the center — the usual "radar" convention. `QAbstractAxis
+  ::setReverse()` does **not** achieve this: reading Qt Charts' own source
+  (`AbstractDomain::toPolarR` in `xypolardomain.cpp`) confirms the radial
+  value-to-radius mapping always puts axis-min at the center and axis-max at
+  the rim, with no reverse handling at all — `reverse` is silently a no-op
+  for a polar radial axis in this Qt version. The fix is done in data space
+  instead: the radial axis is a `QCategoryAxis` (not `QValueAxis`) with an
+  explicit numeric `setRange(0, 90)` (categories/`setStartValue()` alone
+  only define label boundaries, not the axis's actual min/max the domain
+  maps from — left at their `QValueAxis` default of `(0, 0)`, every point
+  would divide by zero), plotted over "distance from zenith"
+  (`radius = 90 - elevationDeg`) with three explicit on-value labels ("90°"
+  at the center, "45°" at mid-radius, "0°" at the rim).
+- The now-marker (`QScatterSeries`) ticks every 1s from `MainWindow`'s
+  `m_radarTickTimer`, mirroring each open tab's own propagator the same way
+  `PassCard`'s live marker does, but centrally driven rather than per-tab.
+- Closing a tab (`onTabCloseRequested`) erases it from
+  `MainWindow::m_radarTabsByNoradId`; double-clicking that satellite's card
+  again creates a fresh tab.
+- `PassFinder::ElevationPoint` grew an `azimuthDeg` field (alongside the
+  existing `elevationDeg`) to carry what the radar plot needs; the
+  curve-sampling loop in `findNextPass` now calls `computeLookAngle` once
+  per point to capture both fields together.
 
 ### Tab 2 — Satellite Catalog
 - `QTableView` backed by a `QAbstractTableModel`, one row per satellite from the loaded TLE set.
@@ -294,16 +340,26 @@ original target layout: `core/SatelliteNaming.*`, a small shared utility
 than duplicating it.
 
 `PassFinder.*` grew a second entry point post-ship: `findUpcomingPasses`
-(bounded by a pass *count*), used both by `PassDetailDialog`'s next-5-passes
-table and by `PassGridWidget`'s pool-and-sort grid population (count=12 per
-satellite — see §2). A `findPassesInWindow` (bounded by wall-clock time
-instead) was added and then removed once the grid switched to the count-
-bounded approach — it had no other caller. `findNextPass` itself also grew a
-capability: when a satellite is already `CurrentlyInView` at `fromUtc`, it
-now searches *backward* (bounded to 6h) for the true AOS instead of
-reporting `fromUtc` as a stand-in — SGP4 propagates to past instants as
-validly as future ones, so there was no reason to settle for an
-approximation there.
+(bounded by a pass *count*), used by `PassGridWidget`'s pool-and-sort grid
+population (count=12 per satellite — see §2). A `findPassesInWindow`
+(bounded by wall-clock time instead) was added and then removed once the
+grid switched to the count-bounded approach — it had no other caller.
+`findNextPass` itself also grew a capability: when a satellite is already
+`CurrentlyInView` at `fromUtc`, it now searches *backward* (bounded to 6h)
+for the true AOS instead of reporting `fromUtc` as a stand-in — SGP4
+propagates to past instants as validly as future ones, so there was no
+reason to settle for an approximation there.
+
+**Current layout (M4 additions):** `ui/PassRadarTab.*` now exists as
+planned (§2.1); `ui/PassDetailDialog.*` — the modal next-5-passes table it
+replaces — was deleted entirely, since double-click no longer opens it and
+nothing else referenced it. `MainWindow`'s `QTabWidget` changed from a
+constructor-local variable to a member (`m_tabs`), since radar tabs are now
+added/removed at runtime from slots (`onRadarTabRequested`,
+`onTabCloseRequested`) rather than being fixed at construction. No new
+module/folder was needed beyond the one new file — `PassRadarTab` lives
+alongside `PassCard`/`PassGridWidget` in `ui/`, reusing the same
+`Sgp4OrbitPropagator`-per-widget pattern `PassCard` established in M3.
 
 **Known gap:** `tests/orbit_tests.cpp` covers `findNextPass`'s core
 invariants and the `CurrentlyInView` backward-AOS-search fix specifically,
@@ -342,6 +398,13 @@ thread directly (each `PassCard` owns its own `Sgp4OrbitPropagator`, loaded
 once at construction): a single propagation per visible card per second is
 cheap enough (well within the §8 NFR's 50-satellite target) that hopping to
 a worker thread for it wasn't worth the complexity.
+
+**As built (M4 addition):** each open `PassRadarTab`'s live now-marker
+ticks the same way, but centrally — a single `MainWindow`-owned 1s
+`m_radarTickTimer` calls `tick()` on every open radar tab, rather than each
+tab arming its own `QTimer` — since the set of open tabs is small (one per
+satellite a user has double-clicked) and already tracked in one place
+(`m_radarTabsByNoradId`).
 
 ---
 
@@ -385,7 +448,7 @@ a worker thread for it wasn't worth the complexity.
 | M1 | TLE fetch (Celestrak first) + parsing + SQLite cache; Tab 2 catalog table (no checkboxes yet) | **Done** — see `README.md` |
 | M2 | SGP4 propagation + next-pass finder for a fixed observer; Tab 2 checkboxes wired to an "active satellites" list | **Done** — vendored SGP4 (§7.2), Maidenhead-locator observer settings (§6), Next AOS scoped to active satellites only (§2) |
 | M3 | Tab 1 pass grid with live elevation charts for active satellites | **Done**, refined post-ship — Qt Charts linked, status-chip mapping + simplified annotations, grid pools/sorts passes across the whole watchlist rather than one-per-satellite (§2), independent recompute cycle from Tab 2's tracker (§7.3), no dedicated tests for the curve/multi-pass code yet (§7.1) |
-| M4 | Double-click a pass card to open (or focus) a per-satellite tab showing a polar (azimuth/elevation) radar plot of that pass | Not started |
+| M4 | Double-click a pass card to open (or focus) a per-satellite tab showing a polar (azimuth/elevation) radar plot of that pass | **Done** — `PassDetailDialog` removed, `PassRadarTab` added (§2.1); radial-axis orientation required a `QCategoryAxis` data-space workaround, not `setReverse()` (§2.1) |
 | M5 | Alert engine (AOS/LOS/threshold) + tray notifications + Alerts dock | Not started |
 | M6 | Pass log + app event log + Log dock + CSV export | Not started |
 | M7 | Space-Track integration (credential storage, auth, rate-limited client) | Not started |
