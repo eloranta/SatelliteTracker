@@ -1,5 +1,6 @@
 #include "PassRadarTab.h"
 
+#include <QCategoryAxis>
 #include <QChartView>
 #include <QLabel>
 #include <QLineSeries>
@@ -12,6 +13,17 @@
 #include "../core/SatelliteNaming.h"
 
 namespace SatelliteTracker {
+
+namespace {
+// Radial plot value: "distance from zenith", so elevation=90 (zenith) plots
+// at radius 0 (center) and elevation=0 (horizon) plots at radius 90 (rim).
+// See PassRadarTab.h for why this is done in data space rather than via
+// QAbstractAxis::setReverse().
+double elevationToRadius(double elevationDeg)
+{
+    return 90.0 - elevationDeg;
+}
+} // namespace
 
 PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     : QWidget(parent)
@@ -35,12 +47,12 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     m_angularAxis->setTickCount(9); // 0,45,...,360
     m_chart->addAxis(m_angularAxis, QPolarChart::PolarOrientationAngular);
 
-    m_radialAxis = new QValueAxis();
-    m_radialAxis->setRange(0.0, 90.0);
-    // Want 0 deg (horizon) at the outer rim and 90 deg (zenith) at the
-    // center. setReverse(true) turned out to invert QPolarChart's radial
-    // axis the opposite way from a normal Cartesian "reverse" -- leaving it
-    // at its default (false) is what actually puts min-at-rim/max-at-center.
+    m_radialAxis = new QCategoryAxis();
+    m_radialAxis->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
+    m_radialAxis->setStartValue(0.0);
+    m_radialAxis->append(QStringLiteral("90°"), 0.0);
+    m_radialAxis->append(QStringLiteral("45°"), 45.0);
+    m_radialAxis->append(QStringLiteral("0°"), 90.0);
     m_radialAxis->setTitleText(QStringLiteral("Elevation (°)"));
     m_chart->addAxis(m_radialAxis, QPolarChart::PolarOrientationRadial);
 
@@ -111,7 +123,7 @@ void PassRadarTab::rebuildPlot()
     QList<QPointF> points;
     points.reserve(m_lastPass.curve.size());
     for (const ElevationPoint &p : m_lastPass.curve) {
-        points.append(QPointF(p.azimuthDeg, p.elevationDeg));
+        points.append(QPointF(p.azimuthDeg, elevationToRadius(p.elevationDeg)));
     }
     m_trackSeries->replace(points);
 }
@@ -129,7 +141,7 @@ void PassRadarTab::tick(const QDateTime &nowUtc)
     const LookAngle look = m_propagator->computeLookAngle(
         nowUtc, m_location.latitudeDeg, m_location.longitudeDeg, m_location.altitudeMeters);
     if (look.valid && look.elevationDeg > 0.0) {
-        m_nowMarkerSeries->replace({QPointF(look.azimuthDeg, look.elevationDeg)});
+        m_nowMarkerSeries->replace({QPointF(look.azimuthDeg, elevationToRadius(look.elevationDeg))});
     } else {
         m_nowMarkerSeries->clear();
     }

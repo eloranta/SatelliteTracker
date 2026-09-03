@@ -15,6 +15,7 @@ class QPolarChart;
 class QLineSeries;
 class QScatterSeries;
 class QValueAxis;
+class QCategoryAxis;
 
 namespace SatelliteTracker {
 
@@ -27,10 +28,18 @@ namespace SatelliteTracker {
 //
 // Angular axis: azimuth, 0-360 degrees, 0 at the top increasing clockwise
 // (Qt Charts' polar-chart default), which already matches compass bearing
-// convention -- no rotation needed. Radial axis: elevation, 0-90 at its
-// default (non-reversed) orientation, which for QPolarChart puts the
-// minimum (0 deg, horizon) at the outer rim and the maximum (90 deg,
-// zenith) at the center -- matching the usual "radar" convention.
+// convention -- no rotation needed.
+//
+// Radial axis: elevation, wanted with 0 deg (horizon) at the outer rim and
+// 90 deg (zenith) at the center, the usual "radar" convention. QAbstractAxis
+// ::setReverse() does NOT achieve this -- verified by reading Qt Charts'
+// own source (AbstractDomain::toPolarR in xypolardomain.cpp): the radial
+// value-to-radius mapping always puts axis-min at the center and axis-max
+// at the rim, with no reverse handling at all, so `reverse` is silently a
+// no-op for a polar radial axis. Instead, m_radialAxis is a QCategoryAxis
+// plotted over a "distance from zenith" domain (radius = 90 - elevationDeg)
+// with explicit labels ("90°" at the center, "0°" at the rim) -- the
+// inversion is done in the data/labels rather than relying on an axis flag.
 class PassRadarTab : public QWidget {
     Q_OBJECT
 public:
@@ -54,7 +63,7 @@ private:
     QPolarChart *m_chart = nullptr;
     QChartView *m_chartView = nullptr;
     QValueAxis *m_angularAxis = nullptr;
-    QValueAxis *m_radialAxis = nullptr;
+    QCategoryAxis *m_radialAxis = nullptr;
     QLineSeries *m_trackSeries = nullptr;
     QScatterSeries *m_nowMarkerSeries = nullptr;
 };
