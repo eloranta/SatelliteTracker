@@ -27,9 +27,10 @@ namespace SatelliteTracker {
 //
 // Angular axis: azimuth, 0-360 degrees, 0 at the top increasing clockwise
 // (Qt Charts' polar-chart default), which already matches compass bearing
-// convention -- no rotation needed. Radial axis: elevation, 0-90, reversed
-// so the zenith (90 deg) is at the center and the horizon (0 deg) at the
-// rim, matching the usual "radar" convention.
+// convention -- no rotation needed. Radial axis: elevation, 0-90 at its
+// default (non-reversed) orientation, which for QPolarChart puts the
+// minimum (0 deg, horizon) at the outer rim and the maximum (90 deg,
+// zenith) at the center -- matching the usual "radar" convention.
 class PassRadarTab : public QWidget {
     Q_OBJECT
 public:

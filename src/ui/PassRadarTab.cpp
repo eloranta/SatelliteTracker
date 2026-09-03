@@ -37,7 +37,10 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
 
     m_radialAxis = new QValueAxis();
     m_radialAxis->setRange(0.0, 90.0);
-    m_radialAxis->setReverse(true); // 90 deg (zenith) at center, 0 deg (horizon) at rim
+    // Want 0 deg (horizon) at the outer rim and 90 deg (zenith) at the
+    // center. setReverse(true) turned out to invert QPolarChart's radial
+    // axis the opposite way from a normal Cartesian "reverse" -- leaving it
+    // at its default (false) is what actually puts min-at-rim/max-at-center.
     m_radialAxis->setTitleText(QStringLiteral("Elevation (°)"));
     m_chart->addAxis(m_radialAxis, QPolarChart::PolarOrientationRadial);
 
