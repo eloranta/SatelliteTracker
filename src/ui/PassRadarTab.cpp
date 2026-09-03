@@ -48,6 +48,10 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     m_chart->addAxis(m_angularAxis, QPolarChart::PolarOrientationAngular);
 
     m_radialAxis = new QCategoryAxis();
+    // append()/setStartValue() alone only define label boundaries -- the
+    // underlying QValueAxis min/max the polar domain actually maps radius
+    // from default to (0, 0), which would divide-by-zero every point.
+    m_radialAxis->setRange(0.0, 90.0);
     m_radialAxis->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
     m_radialAxis->setStartValue(0.0);
     m_radialAxis->append(QStringLiteral("90°"), 0.0);
