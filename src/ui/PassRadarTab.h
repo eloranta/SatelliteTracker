@@ -28,7 +28,8 @@ namespace SatelliteTracker {
 //
 // Angular axis: azimuth, 0-360 degrees, 0 at the top increasing clockwise
 // (Qt Charts' polar-chart default), which already matches compass bearing
-// convention -- no rotation needed.
+// convention -- no rotation needed. Labeled ticks every 30 degrees, plus
+// unlabeled minor ticks every 10 degrees (QValueAxis::setMinorTickCount).
 //
 // Radial axis: elevation, wanted with 0 deg (horizon) at the outer rim and
 // 90 deg (zenith) at the center, the usual "radar" convention. QAbstractAxis
@@ -37,9 +38,13 @@ namespace SatelliteTracker {
 // value-to-radius mapping always puts axis-min at the center and axis-max
 // at the rim, with no reverse handling at all, so `reverse` is silently a
 // no-op for a polar radial axis. Instead, m_radialAxis is a QCategoryAxis
-// plotted over a "distance from zenith" domain (radius = 90 - elevationDeg)
-// with explicit labels ("90°" at the center, "0°" at the rim) -- the
-// inversion is done in the data/labels rather than relying on an axis flag.
+// plotted over a "distance from zenith" domain (radius = 90 - elevationDeg),
+// with one category per 15-degree ring (90/75/.../0 at the center/.../rim)
+// -- each category boundary draws its own concentric gridline circle, which
+// is how the 15-degree rings are drawn at all, not via minor ticks (a
+// QCategoryAxis on a polar radial axis renders one circle per category,
+// unlike QValueAxis's tick-based circles). The inversion is done in the
+// data/labels rather than relying on an axis flag.
 class PassRadarTab : public QWidget {
     Q_OBJECT
 public:

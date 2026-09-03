@@ -6,6 +6,11 @@ namespace SatelliteTracker {
 
 namespace {
 
+// Built from its numeric code point rather than embedded as a literal '°'
+// character, so its meaning can't depend on the compiler's assumed source
+// encoding.
+const QChar kDegreeSign(176);
+
 QString formatNextAos(const PassResult &pass)
 {
     switch (pass.state) {
@@ -95,7 +100,7 @@ QVariant SatelliteModel::data(const QModelIndex &index, int role) const
     case ColEpoch:           return s.epochUtc.isValid()
                                      ? s.epochUtc.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) + " UTC"
                                      : QStringLiteral("—");
-    case ColInclination:     return QString::number(s.inclinationDeg, 'f', 2) + QStringLiteral("°");
+    case ColInclination:     return QString::number(s.inclinationDeg, 'f', 2) + kDegreeSign;
     case ColPeriod:          return QString::number(s.periodMinutes, 'f', 1) + QStringLiteral(" min");
     case ColApogee:          return QString::number(s.apogeeKm, 'f', 0) + QStringLiteral(" km");
     case ColPerigee:         return QString::number(s.perigeeKm, 'f', 0) + QStringLiteral(" km");

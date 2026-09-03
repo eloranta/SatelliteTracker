@@ -20,6 +20,10 @@ namespace SatelliteTracker {
 namespace {
 const QColor kBeforeAosColor(220, 60, 60, 180);  // red: not yet risen
 const QColor kAfterAosColor(60, 180, 90, 180);   // green: risen (AOS reached)
+// Built from its numeric code point rather than embedded as a literal '°'
+// character, so its meaning can't depend on the compiler's assumed source
+// encoding.
+const QChar kDegreeSign(176);
 }
 
 PassCard::PassCard(const Satellite &satellite, QWidget *parent)
@@ -65,7 +69,7 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
     m_timeAxis = new QDateTimeAxis();
     m_timeAxis->setFormat(QStringLiteral("HH:mm:ss"));
     m_elevAxis = new QValueAxis();
-    m_elevAxis->setTitleText(QStringLiteral("Elevation (°)"));
+    m_elevAxis->setTitleText(QStringLiteral("Elevation (") + kDegreeSign + QStringLiteral(")"));
     m_elevAxis->setRange(0.0, 90.0);
     m_chart->addAxis(m_timeAxis, Qt::AlignBottom);
     m_chart->addAxis(m_elevAxis, Qt::AlignLeft);

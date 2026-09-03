@@ -23,6 +23,11 @@ double elevationToRadius(double elevationDeg)
 {
     return 90.0 - elevationDeg;
 }
+
+// Built from its numeric code point rather than embedded as a literal '°'
+// character, so its meaning can't depend on the compiler's assumed source
+// encoding.
+const QChar kDegreeSign(176);
 } // namespace
 
 PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
@@ -43,8 +48,9 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
 
     m_angularAxis = new QValueAxis();
     m_angularAxis->setRange(0.0, 360.0);
-    m_angularAxis->setLabelFormat(QStringLiteral("%d°"));
-    m_angularAxis->setTickCount(9); // 0,45,...,360
+    m_angularAxis->setLabelFormat(QStringLiteral("%d") + kDegreeSign);
+    m_angularAxis->setTickCount(13);      // labeled ticks every 30 deg (0,30,...,360)
+    m_angularAxis->setMinorTickCount(2);  // 2 unlabeled ticks between majors -> every 10 deg
     m_chart->addAxis(m_angularAxis, QPolarChart::PolarOrientationAngular);
 
     m_radialAxis = new QCategoryAxis();
@@ -54,10 +60,17 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     m_radialAxis->setRange(0.0, 90.0);
     m_radialAxis->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
     m_radialAxis->setStartValue(0.0);
-    m_radialAxis->append(QStringLiteral("90°"), 0.0);
-    m_radialAxis->append(QStringLiteral("45°"), 45.0);
-    m_radialAxis->append(QStringLiteral("0°"), 90.0);
-    m_radialAxis->setTitleText(QStringLiteral("Elevation (°)"));
+    // One category per 15-degree elevation ring; each boundary draws its own
+    // concentric gridline circle (QCategoryAxis on a polar radial axis draws
+    // one circle per category, unlike QValueAxis's ticks/minor ticks).
+    m_radialAxis->append(QStringLiteral("90") + kDegreeSign, 0.0);
+    m_radialAxis->append(QStringLiteral("75") + kDegreeSign, 15.0);
+    m_radialAxis->append(QStringLiteral("60") + kDegreeSign, 30.0);
+    m_radialAxis->append(QStringLiteral("45") + kDegreeSign, 45.0);
+    m_radialAxis->append(QStringLiteral("30") + kDegreeSign, 60.0);
+    m_radialAxis->append(QStringLiteral("15") + kDegreeSign, 75.0);
+    m_radialAxis->append(QStringLiteral("0") + kDegreeSign, 90.0);
+    m_radialAxis->setTitleText(QStringLiteral("Elevation (") + kDegreeSign + QStringLiteral(")"));
     m_chart->addAxis(m_radialAxis, QPolarChart::PolarOrientationRadial);
 
     m_trackSeries = new QLineSeries();
@@ -106,9 +119,10 @@ void PassRadarTab::setPassResult(const Satellite &satellite, const PassResult &p
         const QString losText = pass.losUtc.isValid()
             ? pass.losUtc.toLocalTime().toString(QStringLiteral("HH:mm:ss"))
             : QStringLiteral("—");
+        const QString headerTemplate = QStringLiteral("%1 — AOS %2 · TCA %3 (%4")
+            + kDegreeSign + QStringLiteral(" az %5") + kDegreeSign + QStringLiteral(") · LOS %6");
         m_headerLabel->setText(
-            QStringLiteral("%1 — AOS %2 · TCA %3 (%4° az %5°) · LOS %6")
-                .arg(name, aosText, pass.tcaUtc.toLocalTime().toString(QStringLiteral("HH:mm:ss")),
+            headerTemplate.arg(name, aosText, pass.tcaUtc.toLocalTime().toString(QStringLiteral("HH:mm:ss")),
                      QString::number(pass.maxElevationDeg, 'f', 0),
                      QString::number(pass.maxElevAzimuthDeg, 'f', 0), losText));
     }
