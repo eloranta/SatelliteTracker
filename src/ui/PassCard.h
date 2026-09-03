@@ -69,7 +69,6 @@ private:
     bool m_areaIsGreen = false;
 
     QLabel *m_headerLabel = nullptr;
-    QLabel *m_summaryLabel = nullptr;
 
     QChartView *m_chartView = nullptr;
     QChart *m_chart = nullptr;

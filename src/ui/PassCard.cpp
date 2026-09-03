@@ -82,14 +82,6 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
     m_chartView->setMinimumHeight(110);
     layout->addWidget(m_chartView, 1);
 
-    m_summaryLabel = new QLabel(this);
-    QFont summaryFont = m_summaryLabel->font();
-    summaryFont.setPointSize(qMax(7, summaryFont.pointSize() - 2));
-    m_summaryLabel->setFont(summaryFont);
-    m_summaryLabel->setStyleSheet(QStringLiteral("color: #888;"));
-    m_summaryLabel->setWordWrap(true);
-    layout->addWidget(m_summaryLabel);
-
     updateSatellite(satellite);
     rebuildChartForPass();
 }
@@ -154,7 +146,6 @@ void PassCard::rebuildChartForPass()
         m_curveSeries->clear();
         m_nowMarkerSeries->clear();
         m_nowCursorSeries->clear();
-        m_summaryLabel->setText(QStringLiteral("No pass in the next 24h"));
         updateHeaderLabel();
         return;
     }
@@ -182,19 +173,6 @@ void PassCard::rebuildChartForPass()
     // Re-evaluated on the next tick(); default to red until then.
     m_areaIsGreen = false;
     m_areaSeries->setColor(kBeforeAosColor);
-
-    const QString aosText = m_lastPass.state == PassState::CurrentlyInView
-        ? QStringLiteral("in view")
-        : m_lastPass.aosUtc.toString(QStringLiteral("HH:mm:ss"));
-    const QString losText = m_lastPass.losUtc.isValid()
-        ? m_lastPass.losUtc.toString(QStringLiteral("HH:mm:ss"))
-        : QStringLiteral("—");
-
-    m_summaryLabel->setText(
-        QStringLiteral("AOS %1 · TCA %2 (%3° az %4°) · LOS %5")
-            .arg(aosText, m_lastPass.tcaUtc.toString(QStringLiteral("HH:mm:ss")),
-                 QString::number(m_lastPass.maxElevationDeg, 'f', 0),
-                 QString::number(m_lastPass.maxElevAzimuthDeg, 'f', 0), losText));
 
     updateHeaderLabel();
 }
