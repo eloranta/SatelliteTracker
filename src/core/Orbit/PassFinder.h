@@ -12,6 +12,7 @@ enum class PassState { NoPassInWindow, CurrentlyInView, UpcomingPass };
 struct ElevationPoint {
     QDateTime utc;
     double elevationDeg = 0.0;
+    double azimuthDeg = 0.0;
 };
 
 struct PassResult {
@@ -27,9 +28,10 @@ struct PassResult {
     QDateTime losUtc;
     double maxElevationDeg = 0.0;
     double maxElevAzimuthDeg = 0.0;
-    // Elevation-vs-time samples from aosUtc through losUtc (or the scanned
-    // window's end, if losUtc wasn't found), for charting. Empty when state
-    // == NoPassInWindow.
+    // Elevation+azimuth-vs-time samples from aosUtc through losUtc (or the
+    // scanned window's end, if losUtc wasn't found), for the elevation chart
+    // and the azimuth/elevation radar plot alike. Empty when state ==
+    // NoPassInWindow.
     QVector<ElevationPoint> curve;
 };
 

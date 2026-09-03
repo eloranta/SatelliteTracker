@@ -154,7 +154,9 @@ PassResult findNextPass(const IOrbitPropagator &propagator,
     const qint64 spanSeconds = aosUtc.secsTo(curveEnd);
     const int curveStepSeconds = qBound(5, int(spanSeconds / 180), coarseStepSeconds);
     for (QDateTime t = aosUtc; t <= curveEnd; t = t.addSecs(curveStepSeconds)) {
-        result.curve.append({t, elevationDegAt(propagator, t, lat, lon, alt)});
+        const LookAngle look = propagator.computeLookAngle(t, lat, lon, alt);
+        result.curve.append({t, look.valid ? look.elevationDeg : -90.0,
+                                 look.valid ? look.azimuthDeg : 0.0});
     }
 
     return result;
