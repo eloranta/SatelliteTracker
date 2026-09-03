@@ -49,7 +49,7 @@ than custom `QGraphicsItem` label placement. The status chip mapping:
 horizon, AOS >5 min away; `Rising` = below horizon, AOS within 5 min;
 `In View` = above horizon, at/before TCA (ascending); `Setting` = above
 horizon, after TCA (descending). Grid column count is fixed at 4 (not
-auto-fit or Settings-configurable — deferred to M7, since only the minimal
+auto-fit or Settings-configurable — deferred to M8, since only the minimal
 M2 Observer Location dialog exists so far, not the full Settings dialog).
 The card header shows the satellite's short name plus its AOS in **local**
 time (`Today HH:mm:ss`, or `yyyy-MM-dd HH:mm:ss` for another day) instead of
@@ -217,7 +217,7 @@ lat/lon directly — lat/lon are derived from the locator on every load, so the
 locator stays the single source of truth. Stored as `Observer/GridLocator`
 and `Observer/AltitudeMeters` via `QSettings` only (no DB mirror yet — not
 needed until something other than this one dialog needs to read it). `Pass`,
-`AlertRule`, and `AppLogEntry` remain unimplemented, on schedule for M4/M5.
+`AlertRule`, and `AppLogEntry` remain unimplemented, on schedule for M5/M6.
 
 ---
 
@@ -236,7 +236,7 @@ SatelliteTracker/
 │  ├─ core/
 │  │  ├─ Orbit/            # SGP4 propagation wrapper, pass-finding algorithm (M2+)
 │  │  ├─ TleFetch/         # Celestrak + Space-Track clients, rate limiter
-│  │  └─ AlertEngine/      # rule evaluation, notification dispatch (M4+)
+│  │  └─ AlertEngine/      # rule evaluation, notification dispatch (M5+)
 │  ├─ data/
 │  │  ├─ Database/         # SQLite schema + migrations (QtSql)
 │  │  ├─ SatelliteModel.*  # QAbstractTableModel for Tab 2
@@ -245,10 +245,11 @@ SatelliteTracker/
 │  │  ├─ MainWindow.*
 │  │  ├─ PassGridWidget.*  # Tab 1 container + card layout (M3+)
 │  │  ├─ PassCard.*        # individual chart card (M3+)
+│  │  ├─ PassRadarTab.*    # per-satellite polar az/el plot tab (M4+)
 │  │  ├─ CatalogTableView.*# Tab 2
-│  │  ├─ AlertsDock.*      # M4+
-│  │  ├─ LogDock.*         # M5+
-│  │  └─ SettingsDialog.*  # M7+
+│  │  ├─ AlertsDock.*      # M5+
+│  │  ├─ LogDock.*         # M6+
+│  │  └─ SettingsDialog.*  # M8+
 │  └─ workers/
 │     ├─ TleFetchWorker.*  # runs on QThreadPool, emits results via signal (M2+)
 │     └─ PropagationWorker.* # M2+
@@ -275,7 +276,7 @@ reuses the `QtConcurrent::run` + `QFutureWatcher` pattern `MainWindow`
 already used for TLE parsing, rather than introducing a second worker
 architecture. Also new: `core/Maidenhead.*` (grid locator ↔ lat/lon),
 `core/AppSettings.*` + `core/ObserverLocation.h` (the first `QSettings`
-usage), `ui/ObserverLocationDialog.*` (a minimal preview of the eventual M7
+usage), `ui/ObserverLocationDialog.*` (a minimal preview of the eventual M8
 `SettingsDialog`, scoped to just the observer location), and
 `third_party/sgp4/` — a vendored copy of `dnwrnr/sgp4` (Apache-2.0, pinned
 commit), built as its own static library target, since no SGP4 package
@@ -384,10 +385,11 @@ a worker thread for it wasn't worth the complexity.
 | M1 | TLE fetch (Celestrak first) + parsing + SQLite cache; Tab 2 catalog table (no checkboxes yet) | **Done** — see `README.md` |
 | M2 | SGP4 propagation + next-pass finder for a fixed observer; Tab 2 checkboxes wired to an "active satellites" list | **Done** — vendored SGP4 (§7.2), Maidenhead-locator observer settings (§6), Next AOS scoped to active satellites only (§2) |
 | M3 | Tab 1 pass grid with live elevation charts for active satellites | **Done**, refined post-ship — Qt Charts linked, status-chip mapping + simplified annotations, grid pools/sorts passes across the whole watchlist rather than one-per-satellite (§2), independent recompute cycle from Tab 2's tracker (§7.3), no dedicated tests for the curve/multi-pass code yet (§7.1) |
-| M4 | Alert engine (AOS/LOS/threshold) + tray notifications + Alerts dock | Not started |
-| M5 | Pass log + app event log + Log dock + CSV export | Not started |
-| M6 | Space-Track integration (credential storage, auth, rate-limited client) | Not started |
-| M7 | Settings dialog (observer location, sources, refresh interval, alert config, retention); packaging/installer | Not started |
+| M4 | Double-click a pass card to open (or focus) a per-satellite tab showing a polar (azimuth/elevation) radar plot of that pass | Not started |
+| M5 | Alert engine (AOS/LOS/threshold) + tray notifications + Alerts dock | Not started |
+| M6 | Pass log + app event log + Log dock + CSV export | Not started |
+| M7 | Space-Track integration (credential storage, auth, rate-limited client) | Not started |
+| M8 | Settings dialog (observer location, sources, refresh interval, alert config, retention); packaging/installer | Not started |
 
 ---
 

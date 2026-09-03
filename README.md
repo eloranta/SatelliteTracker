@@ -28,9 +28,9 @@ Implements Milestones 1–3 from `SatelliteTracker.md`:
   summary line. A card hides itself once its own LOS passes; the next ~30s recompute cycle
   replaces the whole set. Double-click a card for that satellite's next-5-passes table
 
-Not yet implemented (later milestones per the spec): alerts (M4), pass/app logging (M5),
-Space-Track auth (M6), full Settings dialog + installer (M7 — M2 ships only a minimal
-Observer Location dialog, a preview of it).
+Not yet implemented (later milestones per the spec): per-satellite radar-plot tab on
+double-click (M4), alerts (M5), pass/app logging (M6), Space-Track auth (M7), full Settings
+dialog + installer (M8 — M2 ships only a minimal Observer Location dialog, a preview of it).
 
 ## Prerequisites (MSYS2 MinGW64)
 
