@@ -19,7 +19,6 @@
 namespace SatelliteTracker {
 
 namespace {
-constexpr int kImminentSeconds = 5 * 60;
 const QColor kBeforeAosColor(220, 60, 60, 180);  // red: not yet risen
 const QColor kAfterAosColor(60, 180, 90, 180);   // green: risen (AOS reached)
 }
@@ -31,21 +30,13 @@ PassCard::PassCard(const Satellite &satellite, QWidget *parent)
 
     auto *layout = new QVBoxLayout(this);
 
-    auto *headerRow = new QHBoxLayout();
     m_headerLabel = new QLabel(this);
     QFont headerFont = m_headerLabel->font();
     headerFont.setBold(true);
     headerFont.setPointSize(headerFont.pointSize() - 1);
     m_headerLabel->setFont(headerFont);
     m_headerLabel->setAlignment(Qt::AlignCenter);
-    m_statusChip = new QLabel(this);
-    QFont chipFont = m_statusChip->font();
-    chipFont.setPointSize(qMax(7, chipFont.pointSize() - 2));
-    m_statusChip->setFont(chipFont);
-    m_statusChip->setStyleSheet(QStringLiteral("color: #888;"));
-    headerRow->addWidget(m_headerLabel, 1);
-    headerRow->addWidget(m_statusChip);
-    layout->addLayout(headerRow);
+    layout->addWidget(m_headerLabel);
 
     m_chart = new QChart();
     m_chart->legend()->hide();
@@ -223,7 +214,6 @@ void PassCard::tick(const QDateTime &nowUtc)
     if (!m_propagator || !m_location.isConfigured) {
         m_nowMarkerSeries->clear();
         m_nowCursorSeries->clear();
-        m_statusChip->setText(QStringLiteral("Idle"));
         return;
     }
 
@@ -255,28 +245,6 @@ void PassCard::tick(const QDateTime &nowUtc)
             m_nowCursorSeries->clear();
         }
     }
-
-    m_statusChip->setText(statusFor(nowUtc, elevNow, look.valid));
-}
-
-QString PassCard::statusFor(const QDateTime &nowUtc, double elevationNowDeg, bool haveFix) const
-{
-    if (m_lastPass.state == PassState::NoPassInWindow) {
-        return QStringLiteral("No upcoming pass");
-    }
-    if (!haveFix) {
-        return QStringLiteral("Idle");
-    }
-    if (elevationNowDeg > 0.0) {
-        return nowUtc <= m_lastPass.tcaUtc ? QStringLiteral("In View") : QStringLiteral("Setting");
-    }
-    if (m_lastPass.aosUtc.isValid()) {
-        const qint64 secsToAos = nowUtc.secsTo(m_lastPass.aosUtc);
-        if (secsToAos >= 0 && secsToAos <= kImminentSeconds) {
-            return QStringLiteral("Rising");
-        }
-    }
-    return QStringLiteral("Idle");
 }
 
 void PassCard::mouseDoubleClickEvent(QMouseEvent *event)
