@@ -14,7 +14,6 @@ class QChartView;
 class QPolarChart;
 class QLineSeries;
 class QScatterSeries;
-class QValueAxis;
 class QCategoryAxis;
 
 namespace SatelliteTracker {
@@ -29,7 +28,13 @@ namespace SatelliteTracker {
 // Angular axis: azimuth, 0-360 degrees, 0 at the top increasing clockwise
 // (Qt Charts' polar-chart default), which already matches compass bearing
 // convention -- no rotation needed. Labeled ticks every 30 degrees, plus
-// unlabeled minor ticks every 10 degrees (QValueAxis::setMinorTickCount).
+// unlabeled minor ticks every 10 degrees (QValueAxis::setMinorTickCount,
+// inherited since QCategoryAxis is a QValueAxis). A QCategoryAxis, not a
+// plain QValueAxis, for the same reason as the radial axis below: labels
+// come from literal category text, not QValueAxis::setLabelFormat()'s
+// '%d'-style substitution, which mangles the degree sign (see radial axis
+// comment) -- this keeps both axes' degree signs on the one code path that
+// actually renders it correctly.
 //
 // Radial axis: elevation, wanted with 0 deg (horizon) at the outer rim and
 // 90 deg (zenith) at the center, the usual "radar" convention. QAbstractAxis
@@ -67,7 +72,7 @@ private:
     QLabel *m_headerLabel = nullptr;
     QPolarChart *m_chart = nullptr;
     QChartView *m_chartView = nullptr;
-    QValueAxis *m_angularAxis = nullptr;
+    QCategoryAxis *m_angularAxis = nullptr;
     QCategoryAxis *m_radialAxis = nullptr;
     QLineSeries *m_trackSeries = nullptr;
     QScatterSeries *m_nowMarkerSeries = nullptr;

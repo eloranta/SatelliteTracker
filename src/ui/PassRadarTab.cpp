@@ -6,7 +6,6 @@
 #include <QLineSeries>
 #include <QPolarChart>
 #include <QScatterSeries>
-#include <QValueAxis>
 #include <QVBoxLayout>
 
 #include "../core/Orbit/Sgp4OrbitPropagator.h"
@@ -46,11 +45,31 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     m_chart = new QPolarChart();
     m_chart->legend()->hide();
 
-    m_angularAxis = new QValueAxis();
+    m_angularAxis = new QCategoryAxis();
+    // QValueAxis::setLabelFormat() round-trips the format string through
+    // toLatin1() then QString::asprintf() (see Qt Charts'
+    // ChartAxisElement::createValueLabels()/formatLabel()) -- U+00B0 alone
+    // isn't valid UTF-8, so a '%d<degree>' format silently loses the degree
+    // sign. QCategoryAxis labels are used as literal text with no such
+    // round-trip (same as m_radialAxis below), so use it here too, even
+    // though azimuth has no non-linear axis-orientation need of its own.
     m_angularAxis->setRange(0.0, 360.0);
-    m_angularAxis->setLabelFormat(QStringLiteral("%d") + kDegreeSign);
-    m_angularAxis->setTickCount(13);      // labeled ticks every 30 deg (0,30,...,360)
+    m_angularAxis->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
     m_angularAxis->setMinorTickCount(2);  // 2 unlabeled ticks between majors -> every 10 deg
+    m_angularAxis->setStartValue(0.0);
+    m_angularAxis->append(QStringLiteral("0") + kDegreeSign, 0.0);
+    m_angularAxis->append(QStringLiteral("30") + kDegreeSign, 30.0);
+    m_angularAxis->append(QStringLiteral("60") + kDegreeSign, 60.0);
+    m_angularAxis->append(QStringLiteral("90") + kDegreeSign, 90.0);
+    m_angularAxis->append(QStringLiteral("120") + kDegreeSign, 120.0);
+    m_angularAxis->append(QStringLiteral("150") + kDegreeSign, 150.0);
+    m_angularAxis->append(QStringLiteral("180") + kDegreeSign, 180.0);
+    m_angularAxis->append(QStringLiteral("210") + kDegreeSign, 210.0);
+    m_angularAxis->append(QStringLiteral("240") + kDegreeSign, 240.0);
+    m_angularAxis->append(QStringLiteral("270") + kDegreeSign, 270.0);
+    m_angularAxis->append(QStringLiteral("300") + kDegreeSign, 300.0);
+    m_angularAxis->append(QStringLiteral("330") + kDegreeSign, 330.0);
+    m_angularAxis->append(QStringLiteral("360") + kDegreeSign, 360.0);
     m_chart->addAxis(m_angularAxis, QPolarChart::PolarOrientationAngular);
 
     m_radialAxis = new QCategoryAxis();
