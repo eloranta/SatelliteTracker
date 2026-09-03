@@ -54,6 +54,19 @@ namespace SatelliteTracker {
 // unlike QValueAxis's tick-based circles). The inversion is done in the
 // data/labels rather than relying on an axis flag.
 //
+// Azimuth wraparound: Qt Charts' polar QLineSeries draws a straight chord
+// between two consecutive points regardless of how far apart their raw
+// angular values are (confirmed from source: PolarDomain::calculateGeometry
+// Points() maps each point independently, no wraparound-aware interpolation
+// anywhere in the pipeline) -- so a pass whose azimuth crosses 0/360 (e.g.
+// 355 deg to 5 deg, a real 10-degree step) has consecutive curve points
+// with a ~350-degree raw delta, and the naive chord glitches visibly toward
+// the center. Verified the underlying curve data itself has no anomaly
+// there (elevation varies smoothly) via a diagnostic run against real cached
+// TLEs/observer location. Fix: m_trackSegments splits the track into
+// separate QLineSeries wherever consecutive points' raw azimuth delta
+// exceeds 180 degrees, so no single line ever spans the seam.
+//
 // Direction of travel: a handful of small chevron ("arrowhead") overlays
 // are drawn along the track, each a 2-segment QLineSeries pointing toward
 // later curve points. Computed by converting each anchor point and its
@@ -81,6 +94,7 @@ public:
 private:
     void rebuildPlot();
     void rebuildArrows(const QList<QPointF> &trackPoints);
+    QLineSeries *trackSegment(int index);
 
     Satellite m_satellite;
     ObserverLocation m_location;
@@ -93,7 +107,7 @@ private:
     QChartView *m_chartView = nullptr;
     QCategoryAxis *m_angularAxis = nullptr;
     QCategoryAxis *m_radialAxis = nullptr;
-    QLineSeries *m_trackSeries = nullptr;
+    QVector<QLineSeries *> m_trackSegments;  // grown on demand; see trackSegment()
     QVector<QLineSeries *> m_arrowSeries;
     QScatterSeries *m_nowMarkerSeries = nullptr;
 };

@@ -132,15 +132,14 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     m_radialAxis->setTitleText(QStringLiteral("Elevation (") + kDegreeSign + QStringLiteral(")"));
     m_chart->addAxis(m_radialAxis, QPolarChart::PolarOrientationRadial);
 
-    m_trackSeries = new QLineSeries();
-    m_chart->addSeries(m_trackSeries);
-    m_trackSeries->attachAxis(m_angularAxis);
-    m_trackSeries->attachAxis(m_radialAxis);
+    // Establishes the track's auto-assigned theme color, reused below for
+    // every arrow and (in trackSegment()) every additional track segment.
+    QLineSeries *firstSegment = trackSegment(0);
 
     m_arrowSeries.reserve(kArrowCount);
     for (int i = 0; i < kArrowCount; ++i) {
         auto *arrow = new QLineSeries();
-        arrow->setPen(QPen(m_trackSeries->color(), 2));
+        arrow->setPen(QPen(firstSegment->color(), 2));
         m_chart->addSeries(arrow);
         arrow->attachAxis(m_angularAxis);
         arrow->attachAxis(m_radialAxis);
@@ -211,10 +210,25 @@ void PassRadarTab::setPassResult(const Satellite &satellite, const PassResult &p
     rebuildPlot();
 }
 
+QLineSeries *PassRadarTab::trackSegment(int index)
+{
+    while (m_trackSegments.size() <= index) {
+        auto *segment = new QLineSeries();
+        if (!m_trackSegments.isEmpty())
+            segment->setColor(m_trackSegments.first()->color());
+        m_chart->addSeries(segment);
+        segment->attachAxis(m_angularAxis);
+        segment->attachAxis(m_radialAxis);
+        m_trackSegments.append(segment);
+    }
+    return m_trackSegments[index];
+}
+
 void PassRadarTab::rebuildPlot()
 {
     if (m_lastPass.state == PassState::NoPassInWindow || m_lastPass.curve.isEmpty()) {
-        m_trackSeries->clear();
+        for (QLineSeries *segment : std::as_const(m_trackSegments))
+            segment->clear();
         m_nowMarkerSeries->clear();
         m_azElLabel->setText(QStringLiteral("Az —\nEl —"));
         for (QLineSeries *arrow : std::as_const(m_arrowSeries))
@@ -227,7 +241,24 @@ void PassRadarTab::rebuildPlot()
     for (const ElevationPoint &p : m_lastPass.curve) {
         points.append(QPointF(p.azimuthDeg, elevationToRadius(p.elevationDeg)));
     }
-    m_trackSeries->replace(points);
+
+    // Split into separate line segments wherever the raw azimuth jumps by
+    // more than 180 degrees between consecutive points -- a wrap around
+    // the 0/360 seam, not a real 180-degree swing. See the wraparound
+    // comment on the class declaration for why.
+    int segmentCount = 0;
+    QList<QPointF> current;
+    for (int i = 0; i < points.size(); ++i) {
+        if (i > 0 && std::abs(points[i].x() - points[i - 1].x()) > 180.0) {
+            trackSegment(segmentCount++)->replace(current);
+            current.clear();
+        }
+        current.append(points[i]);
+    }
+    trackSegment(segmentCount++)->replace(current);
+    for (int i = segmentCount; i < m_trackSegments.size(); ++i)
+        m_trackSegments[i]->clear();
+
     rebuildArrows(points);
 }
 
