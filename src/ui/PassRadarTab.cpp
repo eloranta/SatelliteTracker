@@ -1,12 +1,17 @@
 #include "PassRadarTab.h"
 
+#include <cmath>
+#include <utility>
+
 #include <QCategoryAxis>
 #include <QChartView>
 #include <QLabel>
 #include <QLineSeries>
+#include <QPen>
 #include <QPolarChart>
 #include <QScatterSeries>
 #include <QVBoxLayout>
+#include <QtMath>
 
 #include "../core/Orbit/Sgp4OrbitPropagator.h"
 #include "../core/SatelliteNaming.h"
@@ -27,6 +32,34 @@ double elevationToRadius(double elevationDeg)
 // character, so its meaning can't depend on the compiler's assumed source
 // encoding.
 const QChar kDegreeSign(176);
+
+const int kArrowCount = 3;
+const double kArrowWingLength = 6.0;   // in radius units (0-90 domain)
+const double kArrowWingAngleDeg = 25.0;
+
+// (azimuthDeg, plotted radius) -> cartesian, consistent with Qt Charts' own
+// polar convention (0 deg at top, increasing clockwise). Used only to
+// compute the arrow chevrons' local tangent direction -- never touches the
+// actual plotted axes/series.
+QPointF toCartesian(const QPointF &polar)
+{
+    const double rad = qDegreesToRadians(polar.x());
+    return QPointF(polar.y() * std::sin(rad), polar.y() * std::cos(rad));
+}
+
+QPointF toPolar(const QPointF &cartesian)
+{
+    double azimuthDeg = qRadiansToDegrees(std::atan2(cartesian.x(), cartesian.y()));
+    if (azimuthDeg < 0.0)
+        azimuthDeg += 360.0;
+    return QPointF(azimuthDeg, std::hypot(cartesian.x(), cartesian.y()));
+}
+
+QPointF rotated(const QPointF &v, double rad)
+{
+    return QPointF(v.x() * std::cos(rad) - v.y() * std::sin(rad),
+                   v.x() * std::sin(rad) + v.y() * std::cos(rad));
+}
 } // namespace
 
 PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
@@ -97,6 +130,16 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     m_trackSeries->attachAxis(m_angularAxis);
     m_trackSeries->attachAxis(m_radialAxis);
 
+    m_arrowSeries.reserve(kArrowCount);
+    for (int i = 0; i < kArrowCount; ++i) {
+        auto *arrow = new QLineSeries();
+        arrow->setPen(QPen(m_trackSeries->color(), 2));
+        m_chart->addSeries(arrow);
+        arrow->attachAxis(m_angularAxis);
+        arrow->attachAxis(m_radialAxis);
+        m_arrowSeries.append(arrow);
+    }
+
     m_nowMarkerSeries = new QScatterSeries();
     m_nowMarkerSeries->setMarkerSize(12.0);
     m_chart->addSeries(m_nowMarkerSeries);
@@ -154,6 +197,8 @@ void PassRadarTab::rebuildPlot()
     if (m_lastPass.state == PassState::NoPassInWindow || m_lastPass.curve.isEmpty()) {
         m_trackSeries->clear();
         m_nowMarkerSeries->clear();
+        for (QLineSeries *arrow : std::as_const(m_arrowSeries))
+            arrow->clear();
         return;
     }
 
@@ -163,6 +208,40 @@ void PassRadarTab::rebuildPlot()
         points.append(QPointF(p.azimuthDeg, elevationToRadius(p.elevationDeg)));
     }
     m_trackSeries->replace(points);
+    rebuildArrows(points);
+}
+
+void PassRadarTab::rebuildArrows(const QList<QPointF> &trackPoints)
+{
+    const int n = trackPoints.size();
+    if (n < 2) {
+        for (QLineSeries *arrow : std::as_const(m_arrowSeries))
+            arrow->clear();
+        return;
+    }
+
+    for (int a = 0; a < m_arrowSeries.size(); ++a) {
+        // Anchors evenly spaced along the track, in travel order.
+        const double fraction = double(a + 1) / double(m_arrowSeries.size() + 1);
+        const int i = qBound(0, int(fraction * (n - 1)), n - 2);
+
+        const QPointF p0 = toCartesian(trackPoints[i]);
+        const QPointF p1 = toCartesian(trackPoints[i + 1]);
+        QPointF dir = p1 - p0;
+        const double dirLen = std::hypot(dir.x(), dir.y());
+        if (dirLen < 1e-9) {
+            m_arrowSeries[a]->clear();
+            continue;
+        }
+        dir /= dirLen;
+
+        const QPointF backDir(-dir.x(), -dir.y());
+        const double angleRad = qDegreesToRadians(kArrowWingAngleDeg);
+        const QPointF leftWing = p0 + rotated(backDir, angleRad) * kArrowWingLength;
+        const QPointF rightWing = p0 + rotated(backDir, -angleRad) * kArrowWingLength;
+
+        m_arrowSeries[a]->replace({toPolar(leftWing), toPolar(p0), toPolar(rightWing)});
+    }
 }
 
 void PassRadarTab::tick(const QDateTime &nowUtc)

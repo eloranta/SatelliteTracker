@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include <QVector>
 #include <QWidget>
 
 #include "../core/ObserverLocation.h"
@@ -50,6 +51,14 @@ namespace SatelliteTracker {
 // QCategoryAxis on a polar radial axis renders one circle per category,
 // unlike QValueAxis's tick-based circles). The inversion is done in the
 // data/labels rather than relying on an axis flag.
+//
+// Direction of travel: a handful of small chevron ("arrowhead") overlays
+// are drawn along the track, each a 2-segment QLineSeries pointing toward
+// later curve points. Computed by converting each anchor point and its
+// next curve point to cartesian (consistent with Qt's own polar
+// convention: 0 deg at top, clockwise), building the chevron there, then
+// converting back to (azimuth, radius) -- entirely in data space, so it
+// stays correct across window resizes without touching pixel coordinates.
 class PassRadarTab : public QWidget {
     Q_OBJECT
 public:
@@ -63,6 +72,7 @@ public:
 
 private:
     void rebuildPlot();
+    void rebuildArrows(const QList<QPointF> &trackPoints);
 
     Satellite m_satellite;
     ObserverLocation m_location;
@@ -75,6 +85,7 @@ private:
     QCategoryAxis *m_angularAxis = nullptr;
     QCategoryAxis *m_radialAxis = nullptr;
     QLineSeries *m_trackSeries = nullptr;
+    QVector<QLineSeries *> m_arrowSeries;
     QScatterSeries *m_nowMarkerSeries = nullptr;
 };
 
