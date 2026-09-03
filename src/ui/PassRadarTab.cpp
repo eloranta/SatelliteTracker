@@ -90,19 +90,25 @@ PassRadarTab::PassRadarTab(const Satellite &satellite, QWidget *parent)
     m_angularAxis->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
     m_angularAxis->setMinorTickCount(2);  // 2 unlabeled ticks between majors -> every 10 deg
     m_angularAxis->setStartValue(0.0);
-    m_angularAxis->append(QStringLiteral("0") + kDegreeSign, 0.0);
+    // Cardinal points (0/90/180/270) are labeled N/E/S/W instead of their
+    // degree number -- the compass-bearing convention this axis already
+    // follows (0 deg at top, clockwise), spelled out for the reader.
+    m_angularAxis->append(QStringLiteral("N"), 0.0);
     m_angularAxis->append(QStringLiteral("30") + kDegreeSign, 30.0);
     m_angularAxis->append(QStringLiteral("60") + kDegreeSign, 60.0);
-    m_angularAxis->append(QStringLiteral("90") + kDegreeSign, 90.0);
+    m_angularAxis->append(QStringLiteral("E"), 90.0);
     m_angularAxis->append(QStringLiteral("120") + kDegreeSign, 120.0);
     m_angularAxis->append(QStringLiteral("150") + kDegreeSign, 150.0);
-    m_angularAxis->append(QStringLiteral("180") + kDegreeSign, 180.0);
+    m_angularAxis->append(QStringLiteral("S"), 180.0);
     m_angularAxis->append(QStringLiteral("210") + kDegreeSign, 210.0);
     m_angularAxis->append(QStringLiteral("240") + kDegreeSign, 240.0);
-    m_angularAxis->append(QStringLiteral("270") + kDegreeSign, 270.0);
+    m_angularAxis->append(QStringLiteral("W"), 270.0);
     m_angularAxis->append(QStringLiteral("300") + kDegreeSign, 300.0);
     m_angularAxis->append(QStringLiteral("330") + kDegreeSign, 330.0);
-    m_angularAxis->append(QStringLiteral("360") + kDegreeSign, 360.0);
+    // No separate 360 entry: QCategoryAxis::append() keys categories by
+    // label text and silently drops a second "N" (it would otherwise be
+    // identical to the 0-deg entry above -- 0 and 360 are the same point on
+    // a full circle, so nothing is lost by not drawing a redundant spoke).
     m_chart->addAxis(m_angularAxis, QPolarChart::PolarOrientationAngular);
 
     m_radialAxis = new QCategoryAxis();

@@ -28,8 +28,10 @@ namespace SatelliteTracker {
 //
 // Angular axis: azimuth, 0-360 degrees, 0 at the top increasing clockwise
 // (Qt Charts' polar-chart default), which already matches compass bearing
-// convention -- no rotation needed. Labeled ticks every 30 degrees, plus
-// unlabeled minor ticks every 10 degrees (QValueAxis::setMinorTickCount,
+// convention -- no rotation needed. Labeled ticks every 30 degrees (the
+// four cardinal points -- 0/90/180/270 -- spelled out as N/E/S/W rather
+// than their degree number), plus unlabeled minor ticks every 10 degrees
+// (QValueAxis::setMinorTickCount,
 // inherited since QCategoryAxis is a QValueAxis). A QCategoryAxis, not a
 // plain QValueAxis, for the same reason as the radial axis below: labels
 // come from literal category text, not QValueAxis::setLabelFormat()'s
